@@ -1,0 +1,291 @@
+.dev.vars.example
+  s_7abf14402ed057::t_3bbff2381acd82 1-5
+.env.example
+  s_7abf14402ed057::t_86695d46859573 1-2
+.gitignore
+  s_7abf14402ed057::t_78b3f7bca99803 1-17
+.nvmrc
+  s_7abf14402ed057::t_f8692170266361 1
+.prettierignore
+  s_7abf14402ed057::t_ccc3eb9f9867cb 1-11
+.prettierrc.json
+  s_7abf14402ed057::t_6f9255e7072b90 1-6
+.python-version
+  s_7abf14402ed057::t_f2778945d530fa 1
+AGENTS.md
+  s_7abf14402ed057::t_a081efa96fdec3 1-22
+DESIGN.md
+  s_7abf14402ed057::t_a53818ca1f791e 1-290
+LICENSE
+  s_7abf14402ed057::t_760a5429a515a2 1-21
+NOTICE.md
+  s_7abf14402ed057::t_9f01abe996178a 1-20
+README.md
+  s_7abf14402ed057::t_720890dbb1bd32 1-56
+blueprint.yaml
+  s_7abf14402ed057::t_736b74ebfe0f28 1-52
+docs/agent.md
+  s_7abf14402ed057::t_4bf700e96898a3 1-44
+docs/authentication.md
+  s_7abf14402ed057::t_e3ffbac8114758 1-27
+docs/deployment.md
+  s_7abf14402ed057::t_eb33887635bb2a 1-67
+docs/development.md
+  s_7abf14402ed057::t_0d9fc5cfce5e3d 1-54
+package-lock.json
+  s_7abf14402ed057::t_6f0fb8529887b0 1-3557
+package.json
+  s_7abf14402ed057::t_c7cf253ce2e8ac 1-51
+pylock.toml
+  s_7abf14402ed057::t_cf0d62c3a97582 1-220
+pyproject.toml
+  s_7abf14402ed057::t_65188e28329ca8 1-33
+scripts/build_pipecat.py
+  s_7abf14402ed057::t_254e0a7cb4eba2 1-113
+scripts/dev-proxy.ts
+  s_7abf14402ed057::t_f8197b4afe4e63 1-65
+scripts/setup.py
+  s_7abf14402ed057::t_90cba13d32e3d3 1-5
+scripts/worker.py
+  s_7abf14402ed057::t_7d6ef2a4502de4 1-16
+src/agent/config.py
+  s_7abf14402ed057::t_2dfeb1616875e5 1-85
+src/agent/engine.py
+  s_7abf14402ed057::t_f302ffcd778ccd 1-418
+src/agent/fillers.py
+  s_7abf14402ed057::t_751378b69ab32c 1-87
+src/agent/pipeline.py
+  s_7abf14402ed057::t_dda33847bb4b9b 1-360
+src/agent/resources.py
+  s_7abf14402ed057::t_79b83a0f7e8ac9 1-11
+src/agent/speech_history.py
+  s_7abf14402ed057::t_24d126abc85807 1-106
+src/agent/tools.py
+  s_7abf14402ed057::t_7bd426ee2e38a9 1-191
+src/entry.py
+  s_7abf14402ed057::t_aa4a5f9b4751c3 1-41
+src/server/auth.py
+  s_7abf14402ed057::t_4d84e6be47ba42 1-28
+src/server/auth_code.py
+  s_7abf14402ed057::t_d8c953b6033ac9 1-86
+src/server/call.py
+  s_7abf14402ed057::t_58d311ffe854ec 1-399
+src/server/http.py
+  s_7abf14402ed057::t_1a72a2efe4cbca 1-68
+src/server/models.py
+  s_7abf14402ed057::t_9bafaf86749ee5 1-27
+src/server/observability.py
+  s_7abf14402ed057::t_e4a02fa2ff6bbd 1-156
+src/server/realtime.py
+  s_7abf14402ed057::t_187ef83b663c16 1-222
+src/server/routes.py
+  s_7abf14402ed057::t_219066659ab310 1-91
+src/services/__init__.py
+  s_7abf14402ed057::t_b526582ec12bd8 1
+src/services/docs.py
+  s_7abf14402ed057::t_38f92c0d85cb31 1-202
+src/services/docs_page.py
+  s_7abf14402ed057::t_c4b8b898772030 1-143
+src/services/flux.py
+  s_7abf14402ed057::t_a0014d0a979b14 1-382
+src/services/http.py
+  s_7abf14402ed057::t_399daf88c5075e 1-18
+src/services/inference.py
+  s_7abf14402ed057::t_fc44d2ab9215e1 1-99
+src/services/llm.py
+  s_7abf14402ed057::t_a20644d1c3168d 1-320
+src/services/models.py
+  s_7abf14402ed057::t_57fdb31ac55929 1-155
+src/services/status.py
+  s_7abf14402ed057::t_5bc49ecb818caf 1-165
+src/services/stt.py
+  s_7abf14402ed057::t_5ab20409fc928c 1-74
+src/services/tts.py
+  s_7abf14402ed057::t_26a96ecb6b4cf3 1-285
+src/services/weather.py
+  s_7abf14402ed057::t_1bdc3fcc4895e0 1-266
+src/services/web_search.py
+  s_7abf14402ed057::t_6dd376096c4bfd 1-134
+src/transport/auth.py
+  s_7abf14402ed057::t_1849a15f831b71 1-26
+src/transport/codec.py
+  s_7abf14402ed057::t_0b67407250e0a7 1-83
+src/transport/output.py
+  s_7abf14402ed057::t_bcc9fe894b9219 1-291
+src/transport/playback.py
+  s_7abf14402ed057::t_4144b98ab4ab45 1-44
+src/transport/thinking.py
+  s_7abf14402ed057::t_0a9894f095a871 1-82
+tests/client/api.test.ts
+  s_7abf14402ed057::t_4056f805df50f3 1-78
+tests/client/call.test.ts
+  s_7abf14402ed057::t_0f97147522c06c 1-180
+tests/client/conversation.test.ts
+  s_7abf14402ed057::t_88300aaeaa8787 1-280
+tests/client/dev-proxy.test.ts
+  s_7abf14402ed057::t_1b6cb062e3441b 1-37
+tests/client/events.test.ts
+  s_7abf14402ed057::t_1d209b1be75e49 1-71
+tests/client/model.test.ts
+  s_7abf14402ed057::t_2a5dc985a0bc93 1-209
+tests/client/peer.test.ts
+  s_7abf14402ed057::t_29da5f30becffc 1-53
+tests/server/conftest.py
+  s_7abf14402ed057::t_e0118ce48764f4 1-125
+tests/server/test_audio_input.py
+  s_7abf14402ed057::t_6dd99014ba3fbd 1-200
+tests/server/test_audio_output.py
+  s_7abf14402ed057::t_4636860f00bfb1 1-629
+tests/server/test_auth.py
+  s_7abf14402ed057::t_f94b4d18ce15b3 1-41
+tests/server/test_auth_boundary.py
+  s_7abf14402ed057::t_6a4c4550f2322d 1-88
+tests/server/test_background.py
+  s_7abf14402ed057::t_5f7ebceae4abaf 1-26
+tests/server/test_call.py
+  s_7abf14402ed057::t_b86e0b146ec006 1-247
+tests/server/test_docs.py
+  s_7abf14402ed057::t_0ecb0f4bc7afa9 1-293
+tests/server/test_docs_page.py
+  s_7abf14402ed057::t_ff022d0daca0e1 1-120
+tests/server/test_fillers.py
+  s_7abf14402ed057::t_16ad00deeaace0 1-30
+tests/server/test_media_sockets.py
+  s_7abf14402ed057::t_37a7a92e3db187 1-151
+tests/server/test_models.py
+  s_7abf14402ed057::t_6adc1889f91bcf 1-40
+tests/server/test_observability.py
+  s_7abf14402ed057::t_409d9a8a66a1d9 1-68
+tests/server/test_realtime.py
+  s_7abf14402ed057::t_62fbfbe06b6f1a 1-119
+tests/server/test_routes.py
+  s_7abf14402ed057::t_b4d62ea4a8e1d9 1-80
+tests/server/test_speech_history.py
+  s_7abf14402ed057::t_31ed8b659490ce 1-75
+tests/server/test_status.py
+  s_7abf14402ed057::t_e3f45a8f55334d 1-74
+tests/server/test_thinking.py
+  s_7abf14402ed057::t_67f9e05ceb390a 1-36
+tests/server/test_tools.py
+  s_7abf14402ed057::t_1963c9b756d988 1-554
+tests/server/test_weather.py
+  s_7abf14402ed057::t_484268341d9d3b 1-205
+tests/server/test_web_search.py
+  s_7abf14402ed057::t_6ef361924e0a2a 1-77
+tsconfig.json
+  s_7abf14402ed057::t_7fc30b8a707908 1-17
+uv.lock
+  s_7abf14402ed057::t_12ade70ec6a888 1-1481
+vendor/DOCOPT-LICENSE
+  s_7abf14402ed057::t_cd074af50e6556 1-19
+vendor/NOTICE
+  s_7abf14402ed057::t_3ddf899ef0e00a 1-25
+vendor/PIPECAT-LICENSE
+  s_7abf14402ed057::t_60856d7125be90 1-24
+vendor/README.md
+  s_7abf14402ed057::t_bf80d69f1f4deb 1-27
+vendor/licenses/PIPECAT-UI-LICENSE
+  s_7abf14402ed057::t_8af96637a15f5a 1-24
+vendor/licenses/SHADCN-LICENSE
+  s_7abf14402ed057::t_961d738d847cf8 1-21
+vendor/licenses/TRANSFORMERS-LICENSE
+  s_7abf14402ed057::t_43c5493f27109e 1-203
+vendor/pipecat.patch
+  s_7abf14402ed057::t_0c55c7ccdf7cf8 1-89
+vite.config.ts
+  s_7abf14402ed057::t_d3217c38ea298f 1-28
+vitest.config.ts
+  s_7abf14402ed057::t_43ce36aa8d8931 1-5
+web/index.html
+  s_7abf14402ed057::t_3cb8a457394e60 1-15
+web/public/NOTICE.txt
+  s_7abf14402ed057::t_f7c2596e840f1d 1-33
+web/public/_headers
+  s_7abf14402ed057::t_875eafbc598962 1-7
+web/src/App.tsx
+  s_7abf14402ed057::t_a0f62fbd1021b2 1-84
+web/src/auth/access-code.tsx
+  s_7abf14402ed057::t_6d8304f64e3d90 1-78
+web/src/auth/index.ts
+  s_7abf14402ed057::t_efc9a754842e04 1-7
+web/src/auth/provider.ts
+  s_7abf14402ed057::t_fa11659a6d759c 1-47
+web/src/components/AgentSettings.tsx
+  s_7abf14402ed057::t_e1e3b61829b552 1-107
+web/src/components/AppShell.tsx
+  s_7abf14402ed057::t_ada32496cb6fea 1-49
+web/src/components/Button.tsx
+  s_7abf14402ed057::t_e1f1bd708ed9cb 1-48
+web/src/components/CallStage.tsx
+  s_7abf14402ed057::t_82ee00744ffa1b 1-184
+web/src/components/ConnectionDetails.tsx
+  s_7abf14402ed057::t_16d5a6a8731283 1-54
+web/src/components/Conversation.tsx
+  s_7abf14402ed057::t_b0defc7c48f2a5 1-175
+web/src/components/ExportChat.tsx
+  s_7abf14402ed057::t_1706a763841372 1-34
+web/src/components/Field.tsx
+  s_7abf14402ed057::t_1c874717dfdd51 1-32
+web/src/components/Orb.tsx
+  s_7abf14402ed057::t_8e5c65cff05fde 1-270
+web/src/components/StartCall.tsx
+  s_7abf14402ed057::t_523e6055f36a84 1-71
+web/src/components/VoiceRoom.tsx
+  s_7abf14402ed057::t_518a922374b6e1 1-203
+web/src/env.d.ts
+  s_7abf14402ed057::t_a60e4ef5d07ac2 1
+web/src/hooks/useSession.ts
+  s_7abf14402ed057::t_019c797a54b1b7 1-94
+web/src/hooks/useVoiceCall.ts
+  s_7abf14402ed057::t_c0848ec3e7dc5b 1-38
+web/src/lib/api.ts
+  s_7abf14402ed057::t_8604ca2889156c 1-80
+web/src/lib/canvas-theme.ts
+  s_7abf14402ed057::t_875eb29512d254 1-41
+web/src/lib/contracts.ts
+  s_7abf14402ed057::t_46e3174eb6cdf2 1-138
+web/src/lib/session.ts
+  s_7abf14402ed057::t_85404fd04d9cdf 1-11
+web/src/lib/timing.ts
+  s_7abf14402ed057::t_5b8d24c22b89ee 1-59
+web/src/main.tsx
+  s_7abf14402ed057::t_b9125c0cab13af 1-17
+web/src/preview/PreviewApp.tsx
+  s_7abf14402ed057::t_ede48a731a173b 1-110
+web/src/preview/scenarios.ts
+  s_7abf14402ed057::t_924c07903a87e9 1-264
+web/src/styles.css
+  s_7abf14402ed057::t_56f3966f2f8a8b 1-46
+web/src/voice/audio.ts
+  s_7abf14402ed057::t_584788ccdc8a2f 1-126
+web/src/voice/call.ts
+  s_7abf14402ed057::t_d7999cc81e1b52 1-479
+web/src/voice/conversation.ts
+  s_7abf14402ed057::t_023b91180714a6 1-155
+web/src/voice/events.ts
+  s_7abf14402ed057::t_582bfac85052ac 1-36
+web/src/voice/model.ts
+  s_7abf14402ed057::t_1b3663dd411919 1-244
+web/src/voice/peer.ts
+  s_7abf14402ed057::t_9e8584c300da4a 1-92
+web/src/voice/transcript.ts
+  s_7abf14402ed057::t_2a8d3fef8ca3c7 1-95
+wrangler.jsonc
+  s_7abf14402ed057::t_898a40826124ad 1-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f2eb9e5d8814babcbb32ac2f0917aec55d51bc68",
+  "prompts": {},
+  "sessions": {
+    "s_7abf14402ed057": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "57d4b02a-7b49-4023-9948-1c43cab16658",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "korinne <korinne@cloudflare.com>"
+    }
+  }
+}
