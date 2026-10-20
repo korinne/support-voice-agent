@@ -1,0 +1,196 @@
+web/src/auth/index.ts
+  s_7abf14402ed057::t_bfa348cf01f05a 1,5,7
+AGENTS.md
+  s_7abf14402ed057::t_6be51fda5810e5 1,3,7,19-26,30
+web/src/preview/scenarios.ts
+  s_7abf14402ed057::t_e0608f3653dd1d 1,8-11,16-22,38-138,142,144-149,154,164,166,169-172,176-183,216-217,227-228,236,239,244,248,250-251,253-272,275-276,278-281,284-294,297-312,314,316-323,326-335,338-343,345-347,352-358
+web/src/auth/provider.ts
+  s_7abf14402ed057::t_a3ad7f56527d41 10-13,15-20,25-26,29,33-35,45-47
+web/src/preview/PreviewApp.tsx
+  s_7abf14402ed057::t_d694453e2b97c7 1,7-14,30-36,66,72-73,80
+src/agent/pipeline.py
+  s_7abf14402ed057::t_bb7e50a98757b2 26,29-30,42,64-66,70-76,179-184,186-194,210-211,265,351,365
+web/src/lib/format.ts
+  s_7abf14402ed057::t_bfcae3830b6e5c 1-51
+docs/how-it-works.md
+  s_7abf14402ed057::t_76eb2c5c8b05f4 1,3,5-14,16,18,20-23,25,27,29,31-33,35,37-41,43,45,47-49,51-55,57,59-65,67,69,71-168
+docs/development.md
+  s_7abf14402ed057::t_079f9d0badb777 3,7,9,19,21,23-27,38-40,42,44-51,55,57,59,63-74,76,78
+web/src/voice/call.ts
+  s_7abf14402ed057::t_feaeeb0aff224d 8,116,174-176,243
+web/src/components/CallStage.tsx
+  s_7abf14402ed057::t_ad7a92682e7255 3,16-17,26-28,35,55-70
+web/src/voice/conversation.ts
+  s_7abf14402ed057::t_d31fb5280cf900 1,7,11,13-14,16-17,19-20,35-40,66-73,134-158
+web/src/hooks/useSession.ts
+  s_7abf14402ed057::t_d002cf31f575d1 2,4-5,8-9,14,24,26,47-53,56,61,67,72,80-81
+web/src/voice/model.ts
+  s_7abf14402ed057::t_2dc7934e73f274 113-115,119,137-139
+migrations/0001_initial.sql
+  s_7abf14402ed057::t_5aa424b3123eb0 1-59
+web/src/components/AppShell.tsx
+  s_7abf14402ed057::t_14b7e7278ad3ff 1,8-9,12,15-16,24,33,35-36,39
+src/help/shipping-and-tracking.md
+  s_7abf14402ed057::t_7b585bd3dad76d 1-20
+package-lock.json
+  s_7abf14402ed057::t_36075304341ae0 2,8
+src/agent/resources.py
+  s_7abf14402ed057::t_a7be857d93dfca 3,6-7,14-30
+migrations/0002_sign_in_with_cloudflare.sql
+  s_7abf14402ed057::t_6241d3446338ff 1-3
+tests/server/test_auth_boundary.py
+  s_7abf14402ed057::t_45b704c80586ff 6,11-12,24,32,74,77-78,82,86-102
+pyproject.toml
+  s_7abf14402ed057::t_bccc0ca0352acb 2
+src/services/tts.py
+  s_7abf14402ed057::t_abbbd4d5286084 42-44,58,172,176
+web/src/components/VoiceRoom.tsx
+  s_7abf14402ed057::t_35170663831dba 3-4,7,14,17,24-25,36-38,40,46-48,53-63,70-88,96-97,105,111,166-168,171-174
+tests/server/conftest.py
+  s_7abf14402ed057::t_0db3f81e066dfc 4,8,23-32,95-145,170-171,175,184-190,193
+src/server/auth_cloudflare.py
+  s_7abf14402ed057::t_402f909e01d859 1,3-13,15,18,21,23-25,27-32,34-43,45-46,48-51,54,56-65,68-73,80-82,85,88,90,92-97,99-100,103-106,109-112,114,117,120-124,127-139,141-156,158-210,212-251,255-257
+web/src/lib/api.ts
+  s_7abf14402ed057::t_0ef6291c1a483f 4-7,15-20,46-47
+web/src/lib/session.ts
+  s_7abf14402ed057::t_fd26f3c0cdd69f 2-3,12-25
+web/src/auth/cloudflare-login.tsx
+  s_7abf14402ed057::t_cb29f6f1425c63 4,8-10,12-14,16-35,45,48,50-58,62,65
+wrangler.jsonc
+  s_7abf14402ed057::t_3b1737c472126b 3,8-15,18-26,31,42,46-47,50-54
+tests/server/test_background.py
+  s_7abf14402ed057::t_6db6259837ec25 3,5,12-21,36-61
+src/services/inference.py
+  s_7abf14402ed057::t_d4524e15d54e48 4,20-27,40-66,97,99-107,115-127
+src/help/account-payments-and-credit.md
+  s_7abf14402ed057::t_eb5e56c081196f 1-15
+tests/server/test_call.py
+  s_7abf14402ed057::t_5379fe4913cba5 3,7-8,10-11,38-39,53-118,166,317-339
+tests/server/test_models.py
+  s_7abf14402ed057::t_fe57883ee8f98d 35
+src/agent/fillers.py
+  s_7abf14402ed057::t_22b852d4941f31 1,10-13,15-18,20-23,25-27,29-31,38-44,64-67,70,73-83,91
+tests/server/test_store.py
+  s_7abf14402ed057::t_b0203d78aa72c8 2,4,8-9,11-33,36-37,40-50,53-60,62-76,78-106
+docs/deployment.md
+  s_7abf14402ed057::t_3df91f34f624fc 3,5-11,13-22,26,35,37-43,45,47,51,59-209,211,213,215,221-223,225-229,235-237,239
+tests/server/test_inference.py
+  s_7abf14402ed057::t_224c2cf00f9d08 1,3,5,7-9,12-14,16-18,20-29,31-41,43-55,57-59
+src/server/models.py
+  s_7abf14402ed057::t_bd98ae2e895379 5,13
+tests/server/test_routes.py
+  s_7abf14402ed057::t_132ba622c54ff3 5,23-25,84-161
+src/server/routes.py
+  s_7abf14402ed057::t_ca95f62b44e08e 8-9,12-13,20-23,26-42,45-49,59-62,67-81,83,87,105-106,108,120-128,130,144
+src/server/call.py
+  s_7abf14402ed057::t_8dcae345980837 14,21,126-127,150,205-206,208-212,215-219,223,225-226,296-298,323-324,333-368
+tests/server/test_desk.py
+  s_7abf14402ed057::t_75c949e80551d6 1,3,5,8,10-12,14-15,18-19,22-28,30,33-36,39-47,50-52,54-56,60,62-69,72-94,97-100,103-110,114-163
+tests/client/format.test.ts
+  s_7abf14402ed057::t_3fec498d90f562 1-19
+tests/server/test_fillers.py
+  s_7abf14402ed057::t_7307c7729a5f37 1-2,5,7-12,16-17,22,24,26
+src/agent/engine.py
+  s_7abf14402ed057::t_184f688c0fe87e 10,15,26-30,34-43,48,55-56,175-209
+src/help/warranty.md
+  s_7abf14402ed057::t_766de877ddf508 1-18
+src/support/triage.py
+  s_7abf14402ed057::t_7631df0d76f518 1-76
+tests/server/test_media_sockets.py
+  s_7abf14402ed057::t_ba9f663c171747 14,51-60
+src/help/talking-to-a-person.md
+  s_7abf14402ed057::t_bbf95f54d9db2a 1-15
+docs/authentication.md
+  s_7abf14402ed057::t_365c97ad1ab5cf 3,5-35,39-60,62,64,66-69,71,73-77,79,81,83-85,87
+src/agent/tools.py
+  s_7abf14402ed057::t_b737d06e314fd2 1-5,8,18,20-21,24,28-244,248,252,254-323,328,336,344-346,348,364,375-376,381-384,386-397,403,409-410
+tests/server/seed.sql
+  s_7abf14402ed057::t_b41b0da45df64d 1-22
+DESIGN.md
+  s_7abf14402ed057::t_cb18a702bd1519 3-4,152,156-157,192,254-257,278-291
+src/agent/config.py
+  s_7abf14402ed057::t_d18f21bf440e3e 3,8-13,19-39,42-44,46-89,91,96-100
+src/services/llm.py
+  s_7abf14402ed057::t_4983679ed13d50 32-36,111,129-131,141,208,217,267,270-271,326-329
+web/src/lib/contracts.ts
+  s_7abf14402ed057::t_7a983c6fa3d537 3-4,7-12,17-23,53,62-63,76,79-83,124-138,162-259
+tests/server/test_auth.py
+  s_7abf14402ed057::t_314d12d75268ad 1-6,10,12,16-160,164,170-171,173,175-181
+src/server/desk.py
+  s_7abf14402ed057::t_1fb315a747bc39 1,3-7,9-13,15,17-19,21-29,32-34,37-38,41-44,46-47,49-123,126-131,134-168,171-174,177-181
+web/src/desk/client.ts
+  s_7abf14402ed057::t_8705fae81663b4 1-31
+web/src/preview/DeskPreview.tsx
+  s_7abf14402ed057::t_cdca38732114ec 1-98
+.dev.vars.example
+  s_7abf14402ed057::t_76153de9766870 5-11
+tests/server/test_audio_output.py
+  s_7abf14402ed057::t_df7607811e2176 8,35,54-59,118-127,130-132,137,197-199,293,314,374,393,510-526,543,548-550,553-556,630
+web/index.html
+  s_7abf14402ed057::t_84f7f395a594a4 6,8
+tests/client/call.test.ts
+  s_7abf14402ed057::t_ba3df327e370eb 88,106,167
+src/support/help_center.py
+  s_7abf14402ed057::t_f2e82ea659faa5 1,3-5,7-8,10-13,15-18,20-21,25-28,30-40,43-55,58-71
+src/help/order-changes-and-cancellations.md
+  s_7abf14402ed057::t_ce4dffd1705630 1-22
+web/src/components/StartCall.tsx
+  s_7abf14402ed057::t_0827efc189d6b2 5,16,29
+web/src/main.tsx
+  s_7abf14402ed057::t_a02c56a3941139 8,10-15
+src/help/returns-and-refunds.md
+  s_7abf14402ed057::t_858657ee645b2e 1-21
+web/src/components/AccountPanel.tsx
+  s_7abf14402ed057::t_ae7d002b2aab29 2-7,9-29,31-33,35-75,77-95,97-99,101-102,104-181,186-195
+tests/client/model.test.ts
+  s_7abf14402ed057::t_566c7585ecc805 18,23-25,27,33,35,37,41,47-54,61,65,70,74,77,84,90,97,99
+src/help/damaged-or-defective-items.md
+  s_7abf14402ed057::t_81a2d7a08411a6 1-15
+src/support/store.py
+  s_7abf14402ed057::t_ebe1d185298bcb 1-92,94-123,125,128-134,136-143,145,148-158,161-169,172-186,188-194,196-197,199,202-211,214-218,220-221,223-245,248-270,272,275-283
+src/help/pogo-stick-safety.md
+  s_7abf14402ed057::t_d45308c8c9432c 1-17
+package.json
+  s_7abf14402ed057::t_335b7914dc16f3 2
+src/server/auth.py
+  s_7abf14402ed057::t_887de701c5dff3 3,9-16,18,24-28,30-32,34-36,42-43,45
+tests/server/test_tools.py
+  s_7abf14402ed057::t_058dd0e1a4a02d 9,24-27,29,40,43,48,84-86,105-152,154-161,185,211,296,298-299,319-320,344,346,353,356,364-404,406,408-410,412,416-417,421,425,434-439,447-458,460-468,484,489,513-516,578-592,599,612,628-632,636,644-646,650-656,665-796
+README.md
+  s_7abf14402ed057::t_ee057dd325d47d 1,5,7,9-21,23,27-38,41-53,55,57-59,66-70,72-80,82,86-94,98-105,107
+  s_7abf14402ed057::t_720890dbb1bd32 56,71
+tests/server/test_audio_input.py
+  s_7abf14402ed057::t_fdd9716000f96f 13,99-108
+web/src/App.tsx
+  s_7abf14402ed057::t_573f9ad25b139a 2,8-9,12-13,15,26,30,34,40,43,45,55,63-66
+src/server/observability.py
+  s_7abf14402ed057::t_7b42ea1e93dac5 47
+tests/client/conversation.test.ts
+  s_7abf14402ed057::t_6e38a9a712aaeb 12-34,36-38,40-43,53,56-57,59,64,71-72,75,78,92-93,100,111-112,122,128,160,304-348
+web/src/voice/transcript.ts
+  s_7abf14402ed057::t_e9711949129920 60-63,66-69,73,77-78,82-83
+tests/server/test_support.py
+  s_7abf14402ed057::t_c84edcaf6a6172 1-107
+web/src/desk/DeskApp.tsx
+  s_7abf14402ed057::t_eca8f873f257c6 1-347
+uv.lock
+  s_7abf14402ed057::t_9488e8b60bd6e7 2,1196-1234
+web/src/components/Conversation.tsx
+  s_7abf14402ed057::t_f589f6633d05dc 4-5,8,11-12,14-15,37-41,44-51,95-106,108,112-113,118-126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "611b81f44dbb1944456ee022d99d4df83cd128f6",
+  "prompts": {},
+  "sessions": {
+    "s_7abf14402ed057": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "57d4b02a-7b49-4023-9948-1c43cab16658",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "korinne <korinne@cloudflare.com>"
+    }
+  }
+}
