@@ -5,7 +5,7 @@ import {
   eventsSchema,
   negotiationSchema,
   warmedSchema,
-  type AgentSettings,
+  type CallSettings,
   type VoiceEvent,
 } from '../lib/contracts';
 import { StartupTimings } from '../lib/timing';
@@ -113,14 +113,13 @@ export class VoiceCall {
     );
   }
 
-  async start(agent: AgentSettings, deviceId?: string) {
+  async start(settings: CallSettings, deviceId?: string) {
     if (isCallBusy(this.view)) return;
     const callId = this.nextCallId ?? newCallId();
     this.nextCallId = undefined;
     this.update({
       ...idleCall(),
       error: undefined,
-      agentName: agent.name,
       callId,
       startedAt: Date.now(),
       connectedAt: undefined,
@@ -172,7 +171,9 @@ export class VoiceCall {
       sessionStorage.setItem(pendingCallKey, run.id);
       await this.operation(run, 'Create your call', 'create_call', () =>
         this.control(run, async () => {
-          const result = await request(`calls/${run.id}/create`, callSchema, { body: { agent } });
+          const result = await request(`calls/${run.id}/create`, callSchema, {
+            body: { settings },
+          });
           run.created = true;
           return result;
         }),
@@ -239,7 +240,7 @@ export class VoiceCall {
         }
       });
       run.timings.complete();
-      this.update({ phase: 'connected', connectedAt: Date.now(), status: 'Connected. Say hello.' });
+      this.update({ phase: 'connected', connectedAt: Date.now(), status: 'Connected.' });
     } catch (error) {
       if (pending) {
         if (!pending.cancelled) await this.fail(pending, describeError(error));

@@ -11,13 +11,14 @@ from urllib.parse import parse_qs, urlparse
 from pyodide.ffi import create_proxy
 from workers import DurableObject
 
-from agent.config import MAX_CALL_SECONDS, AgentConfig
+from agent.config import MAX_CALL_SECONDS, CallSettings
 from agent.engine import VoiceEngine
 from server.auth import browser_auth
 from server.http import ApiError, check_origin, read_json, reply
 from server.models import CreateCall, Publish, Renegotiate
 from server.observability import exception_fields, failure, log
 from server.realtime import Realtime
+from support import store
 
 EVENT_WAIT_SECONDS = 20
 
@@ -122,7 +123,8 @@ class VoiceCall(DurableObject):
                 return reply({"error": "media_not_available"}, 403)
             return await self.engine.accept_socket(request, parsed, action)
         try:
-            owner = await browser_auth(self.env).identity(request)
+            caller = await browser_auth(self.env).identity(request)
+            owner = caller.owner
             if request.method != "GET":
                 check_origin(request)
             if request.method == "GET" and action == "warm":
@@ -145,7 +147,7 @@ class VoiceCall(DurableObject):
             async with self.lock:
                 await self.load()
                 if action == "create" and request.method == "POST":
-                    return await self.create(request, owner)
+                    return await self.create(request, caller)
                 self.authorize(owner)
                 self.last_seen = time.monotonic()
                 if self.state["phase"] in {"preparing", "published", "active"} and not self.engine:
@@ -200,19 +202,28 @@ class VoiceCall(DurableObject):
                 self.request_finish("session_error")
             return reply({"error": "session_error", "request_id": reference}, 500)
 
-    async def create(self, request, owner):
-        config = await read_json(request, CreateCall)
+    async def create(self, request, caller):
+        body = await read_json(request, CreateCall)
         if self.state:
-            self.authorize(owner)
-            if self.state["agent"] != config.agent.model_dump():
+            self.authorize(caller.owner)
+            if (
+                self.state["settings"] != body.settings.model_dump()
+                or self.state["customer"]["id"] != caller.customer_id
+            ):
                 raise ApiError("call_already_exists", 409)
             return reply(self.summary())
+        # The call keeps the customer it started with, even if the browser
+        # switches customers before it ends.
+        customer = await store.get_customer(self.env.DB, caller.customer_id)
+        if not customer:
+            raise ApiError("login_required", 401)
         call_id = urlparse(request.url).path.split("/")[3]
         self.state = {
             "id": call_id,
-            "owner": owner,
+            "owner": caller.owner,
             "phase": "created",
-            "agent": config.agent.model_dump(),
+            "settings": body.settings.model_dump(),
+            "customer": {"id": customer["id"], "name": customer["name"]},
             "expires_at_ms": round((time.time() + 90) * 1000),
             "timings": [],
             "resources": {"session_id": None, "mids": [], "adapters": []},
@@ -282,6 +293,9 @@ class VoiceCall(DurableObject):
                 if body.sessionDescription.type != "answer":
                     raise ApiError("answer_required")
                 result = await sfu.renegotiate(body.sessionDescription.model_dump())
+                # The browser now receives the agent's audio, so the agent can say hello.
+                if self.engine:
+                    self.engine.background(self.engine.greet(), "greeting")
             # Descriptions are scoped to the authenticated owner. Callback
             # URLs, app credentials and provider responses never cross here.
             safe = {
@@ -306,7 +320,8 @@ class VoiceCall(DurableObject):
             self.engine = VoiceEngine(
                 self.ctx,
                 self.env,
-                AgentConfig.model_validate(self.state["agent"]),
+                CallSettings.model_validate(self.state["settings"]),
+                self.state["customer"],
                 self.request_finish,
                 lambda: time.monotonic() - self.last_seen < 60,
                 call_id=self.state["id"],
@@ -314,6 +329,42 @@ class VoiceCall(DurableObject):
             )
             parsed = urlparse(request.url)
             return await self.engine.prepare(f"{parsed.scheme}://{parsed.netloc}", self.state["id"])
+
+    async def approval_decided(self, decision):
+        """Called by the staff desk over RPC: tells a live call about a staff decision.
+
+        Returns whether the call was live to hear it. The customer's account
+        page shows the decision either way.
+        """
+        await self.load()
+        engine = self.engine
+        decision = dict(decision)
+        if (
+            not engine
+            or not engine.active
+            or not self.state
+            or self.state["customer"]["id"] != decision["customer_id"]
+        ):
+            return False
+        amount = f"${decision['amount_cents'] / 100:,.2f}"
+        status = "approved" if decision["status"] == "approved" else "declined"
+        engine.notify(
+            {
+                "type": "approval_decided",
+                "request_id": decision["request_id"],
+                "order_id": decision["order_id"],
+                "amount_cents": decision["amount_cents"],
+                "status": status,
+            }
+        )
+        text = (
+            f"A member of the Acme support team {status} credit request "
+            f"{decision['request_id']} for {amount} on order {decision['order_id']}."
+        )
+        if status == "approved":
+            text += " The credit is on the customer's account now."
+        engine.background(engine.announce(text), "staff-decision")
+        return True
 
     def request_finish(self, reason):
         self.stopping = True

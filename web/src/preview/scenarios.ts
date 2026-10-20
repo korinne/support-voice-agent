@@ -1,25 +1,25 @@
+import type { Account, SessionInfo } from '../lib/contracts';
 import type { SessionState } from '../lib/session';
 import { describeTool, type ConversationEntry } from '../voice/conversation';
 import { describeCallEnd, idleCall, type CallView } from '../voice/model';
 
 export const scenarios = [
   { id: 'idle', label: 'Ready' },
-  { id: 'access-code', label: 'Access code' },
-  { id: 'access-error', label: 'Incorrect access code' },
-  { id: 'signing-in', label: 'Checking access code' },
+  { id: 'sign-in', label: 'Sign in' },
+  { id: 'sign-in-error', label: 'Sign-in cancelled' },
+  { id: 'signing-in', label: 'Opening Cloudflare' },
+  { id: 'setup', label: 'Setup required' },
   { id: 'connecting', label: 'Connecting' },
   { id: 'listening', label: 'Listening' },
   { id: 'preparing-audio', label: 'Answer ready, preparing audio' },
   { id: 'speaking', label: 'Speaking' },
-  { id: 'tool-running', label: 'Running a tool' },
-  { id: 'tool-failed', label: 'Tool failed' },
-  { id: 'docs-searching', label: 'Searching Cloudflare docs' },
-  { id: 'docs-sources', label: 'Cloudflare docs sources' },
-  { id: 'docs-empty', label: 'No documentation matches' },
-  { id: 'docs-read', label: 'Read a documentation page' },
-  { id: 'weather-forecast', label: 'Weather forecast' },
-  { id: 'cloudflare-status', label: 'Cloudflare service status' },
-  { id: 'web-search', label: 'Web search sources' },
+  { id: 'tool-running', label: 'Looking up the account' },
+  { id: 'help-sources', label: 'Help center sources' },
+  { id: 'help-empty', label: 'No help center matches' },
+  { id: 'credit-pending', label: 'Credit sent for review' },
+  { id: 'credit-approved', label: 'Staff approved credit' },
+  { id: 'ticket-routed', label: 'Ticket routed by Clef' },
+  { id: 'tool-failed', label: 'Action not allowed' },
   { id: 'interrupted', label: 'Interrupted reply' },
   { id: 'audio-failed', label: 'Speech failed, call continues' },
   { id: 'playback-blocked', label: 'Audio permission needed' },
@@ -35,106 +35,152 @@ export function scenarioFrom(value: string | null): Scenario {
   return scenarios.find((item) => item.id === value)?.id ?? 'idle';
 }
 
+export const previewSession: SessionInfo = {
+  authenticated: true,
+  configured: true,
+  setup_required: [],
+  customer: { id: 'cus_maya', name: 'Maya', email: 'maya@example.com' },
+  assistant: 'Matt',
+  max_call_seconds: 15 * 60,
+};
+
+const mayaAccount: Account = {
+  customer: { id: 'cus_maya', name: 'Maya', email: 'maya@example.com', credit_cents: 0 },
+  orders: [
+    {
+      id: 'A-1042',
+      placed_on: '2026-10-09',
+      status: 'delivered',
+      items: [{ name: 'Self-Folding Umbrella', price_cents: 3400 }],
+      total_cents: 3400,
+      shipping: 'Delivered 2026-10-13',
+    },
+    {
+      id: 'A-1019',
+      placed_on: '2026-09-04',
+      status: 'delivered',
+      items: [{ name: 'Pocket Trampoline', price_cents: 5900 }],
+      total_cents: 5900,
+      shipping: 'Delivered 2026-09-09',
+    },
+  ],
+  tickets: [],
+  approvals: [
+    {
+      id: 'R-4417',
+      order_id: 'A-1042',
+      amount_cents: 1000,
+      reason: 'The umbrella arrived with a bent rib.',
+      status: 'pending',
+      decided_at: null,
+      created_at: '2026-10-15T18:04:00+00:00',
+    },
+  ],
+};
+
+const rosaAccount: Account = {
+  customer: { id: 'cus_rosa', name: 'Rosa', email: 'rosa@example.com', credit_cents: 500 },
+  orders: [
+    {
+      id: 'A-1061',
+      placed_on: '2026-10-15',
+      status: 'processing',
+      items: [{ name: 'Instant Tunnel Kit', price_cents: 4500 }],
+      total_cents: 4500,
+      shipping: 'Not shipped yet',
+    },
+    {
+      id: 'A-1033',
+      placed_on: '2026-09-25',
+      status: 'delivered',
+      items: [{ name: 'Jet-Powered Pogo Stick, model PS-2', price_cents: 12900 }],
+      total_cents: 12900,
+      shipping: 'Delivered 2026-09-30',
+    },
+  ],
+  tickets: [
+    {
+      id: 'T-4821',
+      order_id: 'A-1033',
+      summary: 'Pogo stick smells like fuel',
+      created_at: '2026-10-15T18:10:00+00:00',
+      team: 'safety',
+      team_confidence: 0.931,
+      urgency: 2.88,
+      wants_person: 0.82,
+      triaged_at: '2026-10-15T18:10:03+00:00',
+    },
+  ],
+  approvals: [],
+};
+
+/** The signed-in customer whose problem the scenario's conversation is about. */
+export function previewInfoFor(scenario: Scenario): SessionInfo {
+  return scenario === 'ticket-routed'
+    ? { ...previewSession, customer: { id: 'cus_rosa', name: 'Rosa', email: 'rosa@example.com' } }
+    : previewSession;
+}
+
+/** Account records as they stand at the point the scenario shows. */
+export function previewAccountFor(scenario: Scenario): Account {
+  if (scenario === 'ticket-routed') return rosaAccount;
+  if (scenario !== 'credit-approved') return mayaAccount;
+  return {
+    ...mayaAccount,
+    customer: { ...mayaAccount.customer, credit_cents: 1000 },
+    approvals: mayaAccount.approvals.map((approval) => ({
+      ...approval,
+      status: 'approved',
+      decided_at: '2026-10-15T18:06:00+00:00',
+    })),
+  };
+}
+
 const question = {
   kind: 'user',
   id: '1',
-  text: "What's the weather in San Leandro, California?",
+  text: 'Hi, my umbrella showed up with a bent rib. Can I get store credit?',
 } satisfies ConversationEntry;
+const lookup = (status: 'running' | 'complete'): ConversationEntry => ({
+  kind: 'tool',
+  id: 'tool-account',
+  tool: describeTool('get_account'),
+  ...(status === 'complete' ? { status, summary: '2 orders, $0.00 store credit' } : { status }),
+});
 const answer = {
   kind: 'assistant',
   id: '3',
   generation: 1,
-  text: "It's clear in San Leandro, California, with a temperature of 28.7°C.",
+  text: "I'm sorry about that. I see your Self-Folding Umbrella on order A-1042. How much credit would you like?",
   status: 'complete',
 } satisfies ConversationEntry;
-const weatherSources = [
-  { title: 'Open-Meteo (summarized data)', url: 'https://open-meteo.com/' },
-  { title: 'Weather data: CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
-];
-const tool = (status: 'running' | 'complete' | 'failed'): ConversationEntry => ({
-  kind: 'tool',
-  id: 'tool-weather',
-  tool: describeTool('get_current_weather'),
-  ...(status === 'complete' ? { status, sources: weatherSources } : { status }),
-});
 
 export function previewFor(scenario: Scenario): Preview {
   const view = idleCall();
   const preview: Preview = { scenario, view, session: { kind: 'ready' } };
   switch (scenario) {
-    case 'docs-read':
-    case 'weather-forecast':
-    case 'cloudflare-status':
-    case 'web-search': {
-      const examples = {
-        'docs-read': {
-          question: 'Read the SFU adapter documentation and explain its audio format.',
-          tool: 'read_cloudflare_documentation',
-          answer:
-            'The adapter carries signed 16-bit little-endian PCM audio at 48 kHz, with interleaved stereo channels.',
-          sources: [
-            {
-              title: 'WebSocket adapter',
-              url: 'https://developers.cloudflare.com/realtime/sfu/features/media-transport-adapters/websocket-adapter/',
-            },
-          ],
-        },
-        'weather-forecast': {
-          question: 'Will I need an umbrella tomorrow in San Leandro?',
-          tool: 'get_weather_forecast',
-          answer:
-            'The forecast shows a 70% chance of rain, so taking an umbrella would be a good idea.',
-          sources: weatherSources,
-        },
-        'cloudflare-status': {
-          question: 'Are there any reported Workers incidents?',
-          tool: 'get_cloudflare_status',
-          answer:
-            'The public status page currently lists Workers as operational, with no linked active incidents.',
-          sources: [{ title: 'Cloudflare Status', url: 'https://www.cloudflarestatus.com' }],
-        },
-        'web-search': {
-          question: "Search the web for NASA's Artemis program.",
-          tool: 'search_web',
-          answer:
-            "NASA's Artemis program aims to explore the Moon and prepare for missions to Mars.",
-          sources: [{ title: 'Artemis', url: 'https://www.nasa.gov/humans-in-space/artemis/' }],
-        },
-      };
-      const example = examples[scenario];
-      return {
-        ...preview,
-        view: {
-          ...view,
-          phase: 'connected',
-          microphoneActive: true,
-          connectedAt: Date.now() - 24_000,
-          status: 'Connected. Say hello.',
-          history: [
-            { kind: 'user', id: '1', text: example.question },
-            {
-              kind: 'tool',
-              id: '2',
-              tool: describeTool(example.tool),
-              status: 'complete',
-              sources: example.sources,
-            },
-            { kind: 'assistant', id: '3', generation: 1, text: example.answer, status: 'complete' },
-          ],
-        },
-      };
-    }
     case 'idle':
       return preview;
-    case 'access-code':
+    case 'sign-in':
       return { ...preview, session: { kind: 'locked' } };
-    case 'access-error':
+    case 'sign-in-error':
       return {
         ...preview,
-        session: { kind: 'locked', error: "That access code didn't work. Please try again." },
+        session: {
+          kind: 'locked',
+          error: 'Sign-in was cancelled. Sign in with Cloudflare to call Acme support.',
+        },
       };
     case 'signing-in':
       return { ...preview, session: { kind: 'signing-in' } };
+    case 'setup':
+      return {
+        ...preview,
+        session: {
+          kind: 'unavailable',
+          message: "This app isn't set up yet. It needs the D1 tables. See docs/deployment.md.",
+        },
+      };
     case 'connecting':
       return {
         ...preview,
@@ -163,13 +209,12 @@ export function previewFor(scenario: Scenario): Preview {
         view: {
           ...view,
           phase: 'ended',
-          agentName: 'Matt',
           startedAt: Date.now() - 42_000,
           ...describeCallEnd(scenario === 'call-error' ? 'output_disconnected' : 'user_left'),
           history:
             scenario === 'call-error'
-              ? [question, tool('complete'), { ...answer, status: 'interrupted' }]
-              : [question, tool('complete'), answer],
+              ? [question, lookup('complete'), { ...answer, status: 'interrupted' }]
+              : [question, lookup('complete'), answer],
           cleanupPending: scenario === 'cleanup',
         },
       };
@@ -179,8 +224,8 @@ export function previewFor(scenario: Scenario): Preview {
     phase: 'connected',
     microphoneActive: true,
     connectedAt: Date.now() - 24_000,
-    status: 'Connected. Say hello.',
-    history: [question, tool('complete'), answer],
+    status: 'Connected.',
+    history: [question, lookup('complete'), answer],
   });
   switch (scenario) {
     case 'listening':
@@ -188,72 +233,129 @@ export function previewFor(scenario: Scenario): Preview {
       break;
     case 'preparing-audio':
       view.activity = 'thinking';
-      view.history = [question, tool('complete'), { ...answer, status: 'preparing' }];
+      view.history = [question, lookup('complete'), { ...answer, status: 'preparing' }];
       break;
     case 'audio-failed':
-      view.history = [question, tool('complete'), { ...answer, status: 'audio_failed' }];
+      view.history = [question, lookup('complete'), { ...answer, status: 'audio_failed' }];
       break;
     case 'speaking':
       view.activity = 'speaking';
       view.agentLevel = 0.65;
-      view.history = [question, tool('complete'), { ...answer, status: 'speaking' }];
+      view.history = [question, lookup('complete'), { ...answer, status: 'speaking' }];
       break;
     case 'tool-running':
       view.activity = 'tool';
-      view.history = [question, tool('running')];
+      view.history = [question, lookup('running')];
+      break;
+    case 'help-sources':
+    case 'help-empty':
+      view.history = [
+        { kind: 'user', id: '1', text: 'How long do I have to return something?' },
+        {
+          kind: 'tool',
+          id: 'tool-help',
+          tool: describeTool('search_help_center'),
+          ...(scenario === 'help-sources'
+            ? {
+                status: 'complete' as const,
+                summary: 'Returns and refunds',
+                sources: [{ title: 'Returns and refunds' }],
+              }
+            : { status: 'empty' as const, summary: 'No matching articles' }),
+        },
+        {
+          ...answer,
+          text:
+            scenario === 'help-sources'
+              ? 'You have 30 days from delivery. We take six dollars off the refund for the return label.'
+              : "I couldn't find that in our help center. I can open a ticket so someone follows up.",
+        },
+      ];
+      break;
+    case 'credit-pending':
+    case 'credit-approved':
+      view.history = [
+        question,
+        lookup('complete'),
+        answer,
+        { kind: 'user', id: '4', text: 'Ten dollars would be great.' },
+        {
+          kind: 'tool',
+          id: 'tool-credit',
+          tool: describeTool('request_store_credit'),
+          status: 'complete',
+          summary: 'Sent $10.00 credit for staff review',
+        },
+        {
+          kind: 'assistant',
+          id: '6',
+          generation: 2,
+          text: "I've sent a ten dollar credit request to our team. If you stay on the line, I'll tell you when they decide.",
+          status: 'complete',
+        },
+      ];
+      if (scenario === 'credit-approved')
+        view.history.push(
+          {
+            kind: 'notice',
+            id: 'approval-R-4417',
+            icon: 'approved',
+            text: 'Acme support approved $10.00 credit on order A-1042.',
+          },
+          {
+            kind: 'assistant',
+            id: '8',
+            generation: 3,
+            text: 'Good news, our team approved your ten dollar credit. It is on your account now.',
+            status: 'complete',
+          },
+        );
+      break;
+    case 'ticket-routed':
+      view.history = [
+        { kind: 'user', id: '1', text: 'My pogo stick smells like fuel.' },
+        {
+          kind: 'assistant',
+          id: '2',
+          generation: 1,
+          text: 'Please stop using it and move it away from anything that can burn. I am opening a ticket for our safety team now.',
+          status: 'complete',
+        },
+        {
+          kind: 'tool',
+          id: 'tool-ticket',
+          tool: describeTool('open_ticket'),
+          status: 'complete',
+          summary: 'Opened ticket T-4821',
+        },
+        {
+          kind: 'notice',
+          id: 'triage-T-4821',
+          icon: 'routed',
+          text: 'Clef routed ticket T-4821 to Safety (93% sure). Urgency: Right away (2.9 of 3). The customer asked for a person.',
+        },
+      ];
       break;
     case 'tool-failed':
       view.history = [
-        question,
-        tool('failed'),
-        { ...answer, text: "I couldn't reach the weather service. Please try again in a moment." },
-      ];
-      break;
-    case 'docs-empty':
-      view.history = [
-        { kind: 'user', id: '1', text: 'Does Cloudflare offer video conferencing?' },
+        { kind: 'user', id: '1', text: 'Please cancel my umbrella order.' },
+        { kind: 'tool', id: 'tool-cancel', tool: describeTool('cancel_order'), status: 'failed' },
         {
-          kind: 'tool',
-          id: 'tool-docs',
-          tool: describeTool('search_cloudflare_documentation'),
-          status: 'empty',
-        },
-        { ...answer, text: "That search didn't return any matches. Let me try another query." },
-      ];
-      break;
-    case 'docs-searching':
-    case 'docs-sources':
-      view.activity = scenario === 'docs-searching' ? 'tool' : 'listening';
-      view.history = [
-        { kind: 'user', id: '1', text: 'What audio format does the SFU WebSocket adapter use?' },
-        {
-          kind: 'tool',
-          id: 'tool-docs',
-          tool: describeTool('search_cloudflare_documentation'),
-          ...(scenario === 'docs-searching'
-            ? { status: 'running' as const }
-            : {
-                status: 'complete' as const,
-                sources: [
-                  {
-                    title: 'WebSocket adapters · Cloudflare Realtime docs',
-                    url: 'https://developers.cloudflare.com/realtime/sfu/features/media-transport-adapters/websocket-adapter/',
-                  },
-                ],
-              }),
-        },
-      ];
-      if (scenario === 'docs-sources')
-        view.history.push({
           ...answer,
-          text: "The adapter uses 48 kHz stereo PCM audio. I've included a link to the documentation in our conversation.",
-        });
+          text: 'That order was already delivered, so I cannot cancel it. I can help you return it instead.',
+        },
+      ];
       break;
     case 'interrupted':
       view.history = [
         question,
-        { ...answer, text: 'The weather in San Leandro...', status: 'interrupted' },
-        { kind: 'user', id: '4', text: 'Actually, how about Oakland?' },
+        lookup('complete'),
+        {
+          ...answer,
+          text: "I'm sorry about that. I see your Self-Folding...",
+          status: 'interrupted',
+        },
+        { kind: 'user', id: '4', text: 'Actually, it was the trampoline order.' },
       ];
       break;
     case 'playback-blocked':

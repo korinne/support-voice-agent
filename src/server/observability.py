@@ -44,6 +44,7 @@ _FIELDS = {
     "processor_usable",
     "fatal",
     "text_characters",
+    "response_type",
 }
 _CATEGORIES = (
     ("memory_limit", r"memory.{0,40}(?:limit|exceed)|out of memory|allocation failed"),

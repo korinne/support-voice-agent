@@ -1,55 +1,47 @@
-"""Brief spoken fillers while lookups run. They are audio only, never history."""
+"""Brief spoken fillers while tools run or a reply is slow. They are audio only, never history."""
 
 import random
 
 from pipecat.frames.frames import TTSSpeakFrame
 
-from services.docs import DOCS_TOOL
-from services.docs_page import READ_DOCS_TOOL
-from services.status import STATUS_TOOL
-from services.web_search import WEB_SEARCH_TOOL
-
 # A tool result that arrives during a filler waits for it to finish before the
 # next model request, so keep each phrase short.
 PHRASES = {
-    "get_current_weather": (
-        "Let me check the weather.",
-        "One sec, pulling up the weather.",
-        "Checking the weather real quick.",
+    "get_account": (
+        "Let me pull up your account.",
+        "One sec, finding your orders.",
+        "Let me take a look.",
     ),
-    "get_weather_forecast": (
-        "Let me pull up the forecast.",
-        "One sec, checking the forecast.",
-        "Let me see what the forecast says.",
+    "search_help_center": (
+        "Let me check our help center.",
+        "One sec, looking that up.",
+        "Let me find our policy on that.",
     ),
-    DOCS_TOOL: (
-        "Hmm, let me look that up.",
-        "Let me check the docs.",
-        "One sec, digging through the docs.",
+    # Neutral, because the first cancel_order call only reads the order back.
+    "cancel_order": (
+        "One sec, pulling that order up.",
+        "Okay, one moment.",
     ),
-    READ_DOCS_TOOL: (
-        "Let me read through that page.",
-        "One sec, reading that page.",
-        "Let me take a closer look.",
+    "open_ticket": (
+        "I'll open a ticket for that.",
+        "Let me write that up for the team.",
     ),
-    STATUS_TOOL: (
-        "Let me check the status page.",
-        "One sec, checking Cloudflare's status.",
-        "Let me see if anything's going on.",
-    ),
-    WEB_SEARCH_TOOL: (
-        "Let me search for that.",
-        "Hmm, let me look that up.",
-        "One sec, searching the web.",
+    "request_store_credit": (
+        "Let me send that to the team.",
+        "I'll ask a teammate to approve that.",
     ),
 }
 GENERIC = (
-    "Hmm, let me take a look at that.",
     "One sec, let me check.",
     "Let me look into that.",
 )
-# These answer before a filler could finish, so one would only delay the reply.
-SILENT = frozenset({"get_current_time"})
+# Said when the language model is slow to reply, instead of silence.
+HOLD_ON = (
+    "Sorry, give me a second.",
+    "Bear with me one moment.",
+)
+# Tools that answer before a filler could finish; one would only delay the reply.
+SILENT = frozenset()
 
 
 class Fillers:
@@ -69,10 +61,25 @@ class Fillers:
         self._last = self._random.choice([phrase for phrase in phrases if phrase != self._last])
         return self._last
 
+    def hold_on(self) -> str:
+        self._last = self._random.choice([phrase for phrase in HOLD_ON if phrase != self._last])
+        return self._last
+
 
 def speak_fillers(llm, tts, control):
-    """Queue a filler when Pipecat starts a lookup batch."""
+    """Queue a filler when Pipecat starts a tool batch or a reply is slow."""
     fillers = Fillers()
+
+    async def say(text, generation):
+        # Fillers stay out of the model context and the visible transcript.
+        speech = TTSSpeakFrame(text, append_to_context=False)
+        speech.workers_generation = generation
+        await tts.queue_frame(speech)
+
+    @llm.event_handler("on_response_slow")
+    async def on_response_slow(_service, generation):
+        if generation == control.generation:
+            await say(fillers.hold_on(), generation)
 
     @llm.event_handler("on_function_calls_started")
     async def on_function_calls_started(_service, function_calls):
@@ -81,7 +88,4 @@ def speak_fillers(llm, tts, control):
         generation = function_calls[0].workers_generation
         text = fillers.pick(generation, [call.function_name for call in function_calls])
         if text and generation == control.generation:
-            # Fillers stay out of the model context and the visible transcript.
-            speech = TTSSpeakFrame(text, append_to_context=False)
-            speech.workers_generation = generation
-            await tts.queue_frame(speech)
+            await say(text, generation)

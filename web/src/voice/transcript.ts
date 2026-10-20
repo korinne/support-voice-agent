@@ -57,21 +57,30 @@ function entryMarkdown(entry: ConversationEntry, name: string, ended: boolean): 
           : toolStatuses[entry.status];
       const sources =
         entry.status === 'complete'
-          ? (entry.sources ?? []).map(
-              (source) => `- [${markdownText(source.title)}](<${new URL(source.url).href}>)`,
+          ? (entry.sources ?? []).map((source) =>
+              source.url
+                ? `- [${markdownText(source.title)}](<${new URL(source.url).href}>)`
+                : `- ${markdownText(source.title)}`,
             )
+          : [];
+      const summary =
+        (entry.status === 'complete' || entry.status === 'empty') && entry.summary
+          ? [markdownText(entry.summary)]
           : [];
       return [
         `## Tool: ${markdownText(entry.tool.label)}`,
         `Status: ${status}`,
+        ...summary,
         ...(sources.length ? [sources.join('\n')] : []),
       ].join('\n\n');
     }
+    case 'notice':
+      return `## Update\n\n${markdownText(entry.text)}`;
   }
 }
 
-export function createTranscript(view: CallView, fallbackName: string, exportedAt = Date.now()) {
-  const name = (view.agentName ?? fallbackName).trim() || 'Assistant';
+export function createTranscript(view: CallView, assistant: string, exportedAt = Date.now()) {
+  const name = assistant.trim() || 'Assistant';
   const startedAt = view.startedAt ?? view.connectedAt;
   const ended = view.phase === 'ending' || view.phase === 'ended';
   const status = ended && view.error ? 'Ended with an error' : callStatuses[view.phase];

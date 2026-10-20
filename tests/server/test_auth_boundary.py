@@ -3,13 +3,13 @@ import uuid
 from types import SimpleNamespace
 
 import pytest
-from conftest import Request
+from conftest import Request, Storage, session_cookie
 
 import entry
 import server.call as call_module
 import server.routes as routes_module
-from server.auth import browser_auth
-from server.auth_code import COOKIE, SESSION_SECONDS, AccessCodeAuth
+from server.auth import Caller, browser_auth
+from server.auth_cloudflare import COOKIE, SESSION_SECONDS, CloudflareAuth
 from server.call import VoiceCall
 from server.http import ApiError
 from transport.auth import AdapterAuth
@@ -21,7 +21,7 @@ async def test_an_async_identity_provider_preserves_call_ownership(monkeypatch, 
     class Provider:
         async def identity(self, request):
             # A provider's verified principal need not be a cookie or a hex ID.
-            return request.headers["X-Test-Principal"]
+            return Caller(owner=request.headers["X-Test-Principal"], customer_id="cus_maya")
 
     monkeypatch.setattr(call_module, "browser_auth", lambda _: Provider())
     call = VoiceCall(ctx, env)
@@ -29,6 +29,7 @@ async def test_an_async_identity_provider_preserves_call_ownership(monkeypatch, 
     create.headers["X-Test-Principal"] = "example-idp:user-1"
     assert (await call.fetch(create)).status == 201
     assert call.state["owner"] == "example-idp:user-1"
+    assert call.state["customer"] == {"id": "cus_maya", "name": "Maya Chen"}
     for principal, expected in [("example-idp:user-1", 200), ("example-idp:user-2", 404)]:
         status = Request(f"/api/calls/{CALL}/status")
         status.headers["X-Test-Principal"] = principal
@@ -70,19 +71,32 @@ def test_adapter_tokens_are_scoped_revocable_and_allow_reconnects(monkeypatch):
     assert not first.accepts(next_token)
 
 
-async def test_session_expiry_and_login_rate_limit(env, monkeypatch):
+async def test_sessions_expire(env, monkeypatch):
     from itsdangerous import TimestampSigner
 
-    signer = AccessCodeAuth(env).signer()
-    token = signer.dumps("a" * 32)
+    signer = CloudflareAuth(env).signer("session")
+    token = signer.dumps({"owner": "a" * 32, "customer": "cus_maya", "email": "", "name": ""})
     now = TimestampSigner("key").get_timestamp()
     monkeypatch.setattr(TimestampSigner, "get_timestamp", lambda _: now + SESSION_SECONDS + 1)
     request = Request("/api/session", cookie=f"{COOKIE}={token}")
-    assert (await browser_auth(env).session(request))["authenticated"] is False
+    assert (await browser_auth(env).session(request))["customer"] is None
     with pytest.raises(ApiError) as error:
         await browser_auth(env).identity(request)
     assert error.value.status == 401
-    env.LOGIN_LIMITER.limit.return_value.success = False
-    with pytest.raises(ApiError) as error:
-        await browser_auth(env).login(Request("/api/login", {"password": "test-password"}))
-    assert error.value.status == 429
+
+
+async def test_a_call_keeps_its_customer_and_rejects_removed_ones(ctx, env):
+    call = VoiceCall(ctx, env)
+    create = Request(f"/api/calls/{CALL}/create", {}, cookie=session_cookie(env))
+    assert (await call.fetch(create)).status == 201
+    # A browser that switches customers can't reuse the call for someone else.
+    switched = Request(
+        f"/api/calls/{CALL}/create", {}, cookie=session_cookie(env, customer="cus_sam")
+    )
+    assert (await call.fetch(switched)).status == 409
+    env.DB.connection.execute("DELETE FROM orders WHERE customer_id = 'cus_rosa'")
+    env.DB.connection.execute("DELETE FROM customers WHERE id = 'cus_rosa'")
+    removed = session_cookie(env, customer="cus_rosa")
+    other = VoiceCall(SimpleNamespace(storage=Storage(), waitUntil=lambda _: None), env)
+    response = await other.fetch(Request(f"/api/calls/{CALL}/create", {}, cookie=removed))
+    assert response.status == 401

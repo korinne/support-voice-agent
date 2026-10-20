@@ -1,27 +1,28 @@
 import clsx from 'clsx';
 import { useEffect, useState } from 'react';
-import { agentSchema, type AgentSettings as Settings } from '../lib/contracts';
+import { browserAuth, type SignInCredential } from '../auth';
+import type { Account, SessionInfo } from '../lib/contracts';
 import type { SessionState } from '../lib/session';
 import { describeStatus, isCallBusy, type CallView, type StatusView } from '../voice/model';
-import { AgentSettings } from './AgentSettings';
+import { AccountPanel } from './AccountPanel';
 import { CallStage } from './CallStage';
 import { ConnectionDetails } from './ConnectionDetails';
 import { Conversation } from './Conversation';
 import { ExportChat } from './ExportChat';
 import { StartCall } from './StartCall';
 
+const { SignIn } = browserAuth;
 const tabs = [
   { id: 'conversation', label: 'Conversation' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'account', label: 'Your account' },
 ] as const;
 type Tab = (typeof tabs)[number]['id'];
 
 export function VoiceRoom({
-  settings,
-  onSettingsChange,
   view,
   session,
-  maxCallSeconds,
+  info,
+  loadAccount,
   onStart,
   onWarm,
   onSignIn,
@@ -30,46 +31,61 @@ export function VoiceRoom({
   onMute,
   onResume,
 }: {
-  settings: Settings;
-  onSettingsChange: (settings: Settings) => void;
   view: CallView;
   session: SessionState;
-  maxCallSeconds?: number;
-  onStart: (settings: Settings) => void;
+  info?: SessionInfo;
+  loadAccount: (signal: AbortSignal) => Promise<Account>;
+  onStart: () => void;
   onWarm: () => void;
-  onSignIn: (credential: string) => void;
+  onSignIn: (credential: SignInCredential) => void;
   onRetry: () => void;
   onStop: () => void;
   onMute: () => void;
   onResume: () => void;
 }) {
-  // Before a call there is nothing to read, so open on the settings that shape
-  // it. The transcript takes over as soon as a call begins.
-  const [tab, setTab] = useState<Tab>(view.history.length ? 'conversation' : 'settings');
+  // Before a call there is nothing to read, so open on the account the agent
+  // will work with. The transcript takes over as soon as a call begins.
+  const [tab, setTab] = useState<Tab>(view.history.length ? 'conversation' : 'account');
   const busy = isCallBusy(view);
   useEffect(() => {
     if (busy) setTab('conversation');
   }, [busy]);
-  const spoken = view.history.filter((item) => item.kind !== 'tool').length;
-  const name = view.agentName ?? settings.name;
-  const start = () => {
-    const parsed = agentSchema.safeParse({
-      ...settings,
-      name: settings.name.trim(),
-      utc_offset_minutes: -new Date().getTimezoneOffset(),
-    });
-    if (!parsed.success) return;
-    onSettingsChange(parsed.data);
-    onStart(parsed.data);
-  };
+  const spoken = view.history.filter(
+    (item) => item.kind === 'user' || item.kind === 'assistant',
+  ).length;
+  // Finished tool calls and staff decisions can change the account.
+  const accountVersion =
+    view.history.filter(
+      (item) => item.kind === 'notice' || (item.kind === 'tool' && item.status !== 'running'),
+    ).length + (view.phase === 'ended' ? 1 : 0);
+  const name = info?.assistant ?? 'Matt';
+  const customer = session.kind === 'ready' ? info?.customer : undefined;
+  const signingIn = session.kind === 'locked' || session.kind === 'signing-in';
   return (
     <>
       <div className="grid lg:grid-cols-[minmax(0,1fr)_22rem]">
         <CallStage
           view={view}
           name={name}
-          toolsEnabled={settings.tools_enabled}
-          maxCallSeconds={maxCallSeconds}
+          caller={
+            customer
+              ? {
+                  name: customer.email || customer.name,
+                  hint: `${name} can see the orders on your account.`,
+                }
+              : undefined
+          }
+          cover={
+            signingIn ? (
+              <SignIn
+                busy={session.kind === 'signing-in'}
+                error={session.kind === 'locked' ? session.error : undefined}
+                assistant={name}
+                onSubmit={onSignIn}
+              />
+            ) : undefined
+          }
+          maxCallSeconds={info?.max_call_seconds}
           onStop={onStop}
           onMute={onMute}
           onResume={onResume}
@@ -77,23 +93,22 @@ export function VoiceRoom({
             <StartCall
               session={session}
               ended={view.phase === 'ended'}
-              disabled={!settings.name.trim()}
-              onStart={start}
+              disabled={false}
+              onStart={onStart}
               onWarm={onWarm}
-              onSignIn={onSignIn}
               onRetry={onRetry}
             />
           }
         />
         <aside
           className="flex min-h-0 flex-col border-t border-stone-200 lg:border-t-0 lg:border-l"
-          aria-label="Conversation and settings"
+          aria-label="Conversation and account"
         >
           <div className="flex items-center justify-between gap-2 px-5 sm:px-6">
             <div
               className="flex gap-4 sm:gap-6"
               role="tablist"
-              aria-label="Conversation and settings"
+              aria-label="Conversation and account"
             >
               {tabs.map(({ id, label }, index) => (
                 <button
@@ -148,15 +163,15 @@ export function VoiceRoom({
             </div>
             <div
               role="tabpanel"
-              id="settings-panel"
-              aria-labelledby="settings-tab"
-              hidden={tab !== 'settings'}
+              id="account-panel"
+              aria-labelledby="account-tab"
+              hidden={tab !== 'account'}
               className="lg:absolute lg:inset-0 lg:overflow-y-auto"
             >
-              <AgentSettings
-                settings={settings}
-                onChange={onSettingsChange}
-                disabled={busy || session.kind === 'loading' || session.kind === 'checking'}
+              <AccountPanel
+                load={loadAccount}
+                enabled={session.kind === 'ready'}
+                version={accountVersion}
               />
             </div>
           </div>

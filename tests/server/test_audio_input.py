@@ -10,7 +10,7 @@ from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.workers.runner import WorkerRunner
 
-from agent.config import AgentConfig
+from agent.config import CallSettings
 from agent.engine import VoiceEngine
 from agent.pipeline import provider_event
 from services.flux import FluxBridge
@@ -96,7 +96,16 @@ async def test_delayed_audio_can_drain_without_elapsed_time_credit(input_pipelin
 
 async def test_long_transcript_reaches_pipeline_and_client_events(input_pipeline):
     run = input_pipeline
-    owner = VoiceEngine(None, None, AgentConfig(), None, None, call_id="test", owner_id="test")
+    owner = VoiceEngine(
+        None,
+        None,
+        CallSettings(),
+        {"id": "cus_test", "name": "Test Customer"},
+        None,
+        None,
+        call_id="test",
+        owner_id="test",
+    )
     owner.worker = run.worker
     owner.pipeline_ready = True
     owner.stats["pipeline"] = {"provider_end_events": 0}

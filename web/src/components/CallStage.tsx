@@ -1,6 +1,6 @@
 import { Headphones, Mic, MicOff, PhoneOff, Volume2, type LucideIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { describeStage, type CallView, type StageView } from '../voice/model';
+import { describeStage, type CallView, type Caller, type StageView } from '../voice/model';
 import { Button } from './Button';
 import { Orb } from './Orb';
 
@@ -13,7 +13,8 @@ function duration(seconds: number) {
 export function CallStage({
   view,
   name,
-  toolsEnabled,
+  caller,
+  cover,
   maxCallSeconds,
   startControl,
   onStop,
@@ -22,14 +23,16 @@ export function CallStage({
 }: {
   view: CallView;
   name: string;
-  toolsEnabled: boolean;
+  caller?: Caller;
+  /** Replaces the orb and heading, such as with the sign-in form. */
+  cover?: ReactNode;
   maxCallSeconds?: number;
   startControl: ReactNode;
   onStop: () => void;
   onMute: () => void;
   onResume: () => void;
 }) {
-  const stage = describeStage(view, name, toolsEnabled, maxCallSeconds);
+  const stage = describeStage(view, name, caller, maxCallSeconds);
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (view.phase === 'idle' || view.phase === 'connecting') setElapsed(0);
@@ -49,14 +52,22 @@ export function CallStage({
       <div className="flex flex-1 flex-col rounded-xl bg-stone-900 p-3 sm:p-4">
         {/* Extra bottom padding keeps the centered copy clear of the corner chips. */}
         <div className="relative flex min-h-[22rem] flex-1 flex-col items-center justify-center rounded-lg border border-white/10 bg-stone-800 px-6 pt-10 pb-16 text-center sm:min-h-[26rem] sm:px-10 lg:min-h-0">
-          <Orb controls={stage.controls} userLevel={view.userLevel} agentLevel={view.agentLevel} />
-          <h1 className="max-w-md text-2xl leading-tight font-semibold tracking-tight text-balance text-stone-50 sm:text-3xl">
-            {stage.heading}
-          </h1>
-          <p className="mt-3 max-w-md text-sm leading-6 text-pretty text-stone-400">
-            {stage.subheading}
-          </p>
-          {stage.showHeadphonesTip && (
+          {cover ?? (
+            <>
+              <Orb
+                controls={stage.controls}
+                userLevel={view.userLevel}
+                agentLevel={view.agentLevel}
+              />
+              <h1 className="max-w-md text-2xl leading-tight font-semibold tracking-tight text-balance text-stone-50 sm:text-3xl">
+                {stage.heading}
+              </h1>
+              <p className="mt-3 max-w-md text-sm leading-6 text-pretty text-stone-400">
+                {stage.subheading}
+              </p>
+            </>
+          )}
+          {!cover && stage.showHeadphonesTip && (
             <p className="mt-6 flex items-center gap-2 text-xs text-stone-400">
               <Headphones className="size-3.5" aria-hidden="true" /> Headphones make for a clearer
               conversation.

@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppShell } from '../components/AppShell';
 import { Button } from '../components/Button';
 import { Select } from '../components/Field';
 import { VoiceRoom } from '../components/VoiceRoom';
-import { defaultAgent } from '../lib/contracts';
 import { interruptResponses } from '../voice/conversation';
-import { previewFor, scenarioFrom, scenarios, type Scenario } from './scenarios';
+import {
+  previewAccountFor,
+  previewFor,
+  previewInfoFor,
+  scenarioFrom,
+  scenarios,
+  type Scenario,
+} from './scenarios';
 
 export default function PreviewApp() {
-  const [settings, setSettings] = useState(defaultAgent);
   const [preview, setPreview] = useState(() =>
     previewFor(scenarioFrom(new URLSearchParams(location.search).get('scenario'))),
   );
@@ -22,6 +27,13 @@ export default function PreviewApp() {
     history.replaceState(null, '', url);
   };
 
+  // The account panel reloads when this changes, so keep it stable within a scenario.
+  const loadAccount = useCallback(
+    async () => previewAccountFor(preview.scenario),
+    [preview.scenario],
+  );
+  const info = previewInfoFor(preview.scenario);
+  const signedIn = preview.session.kind === 'ready';
   return (
     <>
       <div className="mx-auto max-w-6xl px-4 pt-4 sm:px-6">
@@ -51,22 +63,21 @@ export default function PreviewApp() {
         </div>
       </div>
       <AppShell
-        label={settings.name.trim() || 'Voice agent'}
+        label={signedIn ? info.customer?.name || info.customer?.email || 'Support' : 'Support'}
         actions={<span className="font-mono text-xs text-stone-500">Local preview</span>}
       >
         <VoiceRoom
-          settings={settings}
-          onSettingsChange={setSettings}
           view={preview.view}
           session={preview.session}
-          maxCallSeconds={15 * 60}
+          info={signedIn ? info : { ...info, authenticated: false, customer: null }}
+          loadAccount={loadAccount}
           onStart={() => {
             select('connecting');
             timer.current = setTimeout(() => select('listening'), 650);
           }}
           onWarm={() => {}}
           onSignIn={() => {
-            // Any code works in the preview: show the busy state, then unlock.
+            // The preview skips the trip to Cloudflare: show the busy state, then unlock.
             select('signing-in');
             timer.current = setTimeout(() => select('idle'), 650);
           }}

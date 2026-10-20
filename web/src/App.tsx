@@ -1,16 +1,18 @@
 import { LogOut } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { AppShell } from './components/AppShell';
 import { Button } from './components/Button';
 import { VoiceRoom } from './components/VoiceRoom';
 import { useSession } from './hooks/useSession';
 import { useVoiceCall } from './hooks/useVoiceCall';
-import { defaultAgent, type AgentSettings } from './lib/contracts';
+import { request } from './lib/api';
+import { accountSchema, currentCallSettings } from './lib/contracts';
 import { isCallBusy } from './voice/model';
 
+const loadAccount = (signal: AbortSignal) => request('account', accountSchema, { signal });
+
 export default function App() {
-  const [settings, setSettings] = useState(defaultAgent);
-  const session = useSession(setSettings);
+  const session = useSession();
   const { call, view } = useVoiceCall(session.state.kind === 'ready');
   const beginning = useRef(false);
   const mounted = useRef(false);
@@ -21,25 +23,26 @@ export default function App() {
     };
   }, []);
 
-  const start = async (agent: AgentSettings) => {
+  const start = async () => {
     if (beginning.current || isCallBusy(call.snapshot())) return;
     beginning.current = true;
     try {
-      // The session is re-read first; a stale one returns to the sign-in control.
+      // The session is re-read first; a stale one returns to the sign-in form.
       if (!(await session.authorize()) || !mounted.current) return;
       await call.recover();
       if (!mounted.current) return;
-      await call.start(agent);
+      await call.start(currentCallSettings());
     } finally {
       beginning.current = false;
     }
   };
 
+  const customer = session.state.kind === 'ready' ? session.info?.customer : null;
   return (
     <AppShell
-      label={settings.name.trim() || 'Voice agent'}
+      label={customer ? customer.name || customer.email : 'Support'}
       actions={
-        session.state.kind === 'ready' && (
+        customer && (
           <Button
             tone="quiet"
             size="sm"
@@ -47,22 +50,20 @@ export default function App() {
             onClick={() => {
               void session.signOut();
             }}
-            aria-label="Sign out"
           >
             <LogOut className="size-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Sign out</span>
+            Sign out
           </Button>
         )
       }
     >
       <VoiceRoom
-        settings={settings}
-        onSettingsChange={setSettings}
         view={view}
         session={session.state}
-        maxCallSeconds={session.maxCallSeconds}
-        onStart={(agent) => {
-          void start(agent);
+        info={session.info}
+        loadAccount={loadAccount}
+        onStart={() => {
+          void start();
         }}
         onWarm={() => call.warm()}
         onSignIn={(credential) => {

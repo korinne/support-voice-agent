@@ -1,45 +1,59 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "realtime-pipecat-voice-agent",
+  "name": "acme-support",
   "main": "src/entry.py",
   "compatibility_date": "2026-10-05",
   "compatibility_flags": ["python_workers"],
   "python_modules": { "exclude": ["**/*.pyc", "openai/**", "PIL/**", "**/*.pyi"] },
-  // Uploads the typing loop next to the Python modules that read it.
-  "rules": [{ "type": "Data", "globs": ["transport/*.wav"], "fallthrough": true }],
+  // Uploads the files Python modules read at runtime: help articles and the typing loop.
+  "rules": [
+    {
+      "type": "Data",
+      "globs": ["help/*.md", "transport/*.wav"],
+      "fallthrough": true,
+    },
+  ],
   "workers_dev": true,
   "ai": { "binding": "AI" },
+  // The first deploy creates the database and the AI Search namespace if they don't exist.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "acme-support", "migrations_dir": "migrations" },
+  ],
+  "ai_search_namespaces": [{ "binding": "AI_SEARCH", "namespace": "acme-support" }],
+  "vars": {
+    // Set this to a gateway you created, such as acme-support, to use its spend limits.
+    "AI_GATEWAY_ID": "default",
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/media/*"],
+    "run_worker_first": ["/api/*", "/auth/*", "/media/*", "/desk/api/*"],
   },
   "durable_objects": { "bindings": [{ "name": "CALLS", "class_name": "VoiceCall" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["VoiceCall"] }],
   "ratelimits": [
-    // Choose distinct account-local IDs so login and call limits have separate counters.
-    { "name": "LOGIN_LIMITER", "namespace_id": "602601", "simple": { "limit": 10, "period": 60 } },
     { "name": "CALL_LIMITER", "namespace_id": "602602", "simple": { "limit": 5, "period": 60 } },
   ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
     "redact_query_string": true,
-    // Traces show each subrequest (Durable Object, rate limiter, Realtime API) as a span.
+    // Traces show each subrequest (Durable Object, D1, rate limiter, Realtime API) as a span.
     "traces": { "enabled": true },
   },
   // Previews inherit none of the bindings above. Each Preview gets its own CALLS namespace;
-  // separate limiter IDs keep Preview traffic out of production's counters.
+  // separate limiter IDs keep Preview traffic out of production's counters. Previews share the
+  // database and help center, so their tickets and credit requests appear on the staff desk.
   "previews": {
     "ai": { "binding": "AI" },
+    "d1_databases": [
+      { "binding": "DB", "database_name": "acme-support", "migrations_dir": "migrations" },
+    ],
+    "ai_search_namespaces": [{ "binding": "AI_SEARCH", "namespace": "acme-support" }],
+    "vars": { "AI_GATEWAY_ID": "default" },
     "durable_objects": { "bindings": [{ "name": "CALLS", "class_name": "VoiceCall" }] },
     "ratelimits": [
-      {
-        "name": "LOGIN_LIMITER",
-        "namespace_id": "602611",
-        "simple": { "limit": 10, "period": 60 },
-      },
       { "name": "CALL_LIMITER", "namespace_id": "602612", "simple": { "limit": 5, "period": 60 } },
     ],
   },

@@ -1,5 +1,11 @@
 REALTIME_APP_ID="your-sfu-app-id"
 REALTIME_AUTH_TOKEN="your-sfu-app-secret"
-APP_PASSWORD="choose-an-internal-evaluation-password"
 SESSION_SECRET="generate-with-python-secrets-token-urlsafe-32"
 
+# Sign in with Cloudflare. Fill in after creating the OAuth client.
+OAUTH_CLIENT_ID="your-oauth-client-id"
+OAUTH_CLIENT_SECRET="your-oauth-client-secret"
+
+# Staff desk (Cloudflare Access). Uncomment after creating the Access application.
+# ACCESS_TEAM_DOMAIN="<your-team>.cloudflareaccess.com"
+# ACCESS_AUD="your-access-application-audience-tag"

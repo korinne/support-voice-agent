@@ -29,6 +29,11 @@ from server.observability import exception_fields, log
 from services.inference import InferenceError, run_inference
 from services.models import TextReply, ToolReply, WorkersAIModel
 
+# After this long without a reply, the agent says a short holding line.
+HOLD_ON_SECONDS = 4
+# A reply that takes longer gets the fallback line instead of more silence.
+LLM_TIMEOUT_SECONDS = 12
+
 
 class WorkersAIAdapter(BaseLLMAdapter):
     @property
@@ -103,6 +108,7 @@ class WorkersAILLM(LLMService):
         model: WorkersAIModel,
         speech_history: SpeechHistory,
         call_id=None,
+        gateway=None,
         utc_offset_minutes=0,
     ):
         super().__init__(
@@ -120,6 +126,9 @@ class WorkersAILLM(LLMService):
         self._request_options = {
             "extraHeaders": {"x-session-affinity": call_id or uuid.uuid4().hex}
         }
+        if gateway:
+            # AI Gateway logs, meters, and can cap spending per customer.
+            self._request_options["gateway"] = gateway
         self._request_task = None
         self._closing = False
         self._tool_calls = {}
@@ -129,6 +138,7 @@ class WorkersAILLM(LLMService):
             MarkdownTextFilter.InputParams(filter_repeated_sequences=False)
         )
         self._register_event_handler("on_response_text", sync=True)
+        self._register_event_handler("on_response_slow")
 
     async def _cancel_request(self):
         task, self._request_task = self._request_task, None
@@ -195,6 +205,7 @@ class WorkersAILLM(LLMService):
             start.workers_generation = generation
             await self.push_frame(start)
             self.control.llm_pending = True
+            hold_on = self.create_task(self._hold_on(generation), "workers-ai-hold-on")
             try:
                 result = await run_inference(
                     self.env.AI,
@@ -203,6 +214,7 @@ class WorkersAILLM(LLMService):
                     self._request_options,
                     log=self.log.bind(generation=generation),
                     is_current=lambda: not self._closing and generation == self.control.generation,
+                    timeout=LLM_TIMEOUT_SECONDS,
                 )
                 usage = self.model.get_usage(result)
                 if usage:
@@ -252,9 +264,11 @@ class WorkersAILLM(LLMService):
                 reply = TextReply(
                     fallbacks.get(
                         fields["error_category"],
-                        "I couldn't finish that response. Please try again.",
+                        "Sorry, I lost my train of thought. Could you say that again?",
                     )
                 )
+            finally:
+                await self.cancel_task(hold_on)
             self.control.llm_pending = False
             if self._closing or generation != self.control.generation:
                 self.summary["stale_dropped"] += 1
@@ -308,6 +322,10 @@ class WorkersAILLM(LLMService):
         finally:
             record["elapsed_ms"] = round((time.monotonic() - started) * 1000, 1)
             self.control.llm_pending = False
+
+    async def _hold_on(self, generation):
+        await asyncio.sleep(HOLD_ON_SECONDS)
+        await self._call_event_handler("on_response_slow", generation)
 
     async def _end_response(self, generation):
         frame = LLMFullResponseEndFrame()

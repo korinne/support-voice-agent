@@ -23,10 +23,11 @@ from pipecat.turns.user_turn_strategies import ExternalUserTurnStrategies
 from pipecat.utils.errors import ErrorCategory
 from pipecat.workers.runner import WorkerRunner
 
-from agent.config import LLM_MODEL
+from agent.config import LLM_MODEL, VOICE, system_prompt
 from agent.fillers import SILENT, speak_fillers
 from agent.speech_history import SpeechHistory
-from agent.tools import build_tools
+from agent.tools import account_snapshot, build_tools
+from server.observability import exception_fields
 from services.flux import MAX_TRANSCRIPT_CHARS
 from services.llm import WorkersAILLM
 from services.models import get_model
@@ -38,7 +39,7 @@ from transport.thinking import ThinkingSound
 MAX_RECENT_PROVIDER_TURNS = 64
 
 
-def _make_services(env, stats, control, config, *, call_id, speech_history):
+def _make_services(env, stats, control, settings, *, resources, speech_history):
     stats["llm"] = {
         "requests": [],
         "responses": [],
@@ -60,12 +61,19 @@ def _make_services(env, stats, control, config, *, call_id, speech_history):
             stats["llm"],
             control,
             model=get_model(LLM_MODEL),
-            call_id=call_id,
-            utc_offset_minutes=config.utc_offset_minutes,
+            call_id=resources.call_id,
+            gateway=resources.gateway,
+            utc_offset_minutes=settings.utc_offset_minutes,
             speech_history=speech_history,
         ),
         WorkersAura(
-            env, stats["tts"], control, time.monotonic(), voice=config.voice, call_id=call_id
+            env,
+            stats["tts"],
+            control,
+            time.monotonic(),
+            voice=VOICE,
+            call_id=resources.call_id,
+            gateway=resources.gateway,
         ),
     )
 
@@ -168,9 +176,22 @@ async def start_pipeline(owner):
                 )
             await self.push_frame(frame, direction)
 
+    try:
+        account = await account_snapshot(owner.resources)
+    except Exception as exc:
+        # Matt can still look the account up with get_account.
+        owner.log.warning("account_preload_failed", **exception_fields(exc))
+        account = None
     context = LLMContext(
-        messages=[{"role": "system", "content": owner.config.system_prompt()}],
-        tools=build_tools(owner.notify, ai=owner.env.AI) if owner.config.tools_enabled else [],
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt(
+                    owner.customer["name"], owner.settings.utc_offset_minutes, account
+                ),
+            }
+        ],
+        tools=build_tools(owner.notify),
     )
     pair = LLMContextAggregatorPair(
         context,
@@ -186,8 +207,8 @@ async def start_pipeline(owner):
         owner.env,
         owner.stats,
         owner.control,
-        owner.config,
-        call_id=owner.resources.call_id,
+        owner.settings,
+        resources=owner.resources,
         speech_history=speech_history,
     )
 
@@ -241,6 +262,7 @@ async def start_pipeline(owner):
     )
     runner = WorkerRunner(handle_sigint=False, handle_sigterm=False, force_gc=False)
     owner.worker = worker
+    owner.tts = tts
     owner.runner = runner
     owner.pipeline_input = audio_input
 
@@ -326,6 +348,7 @@ async def provider_event(owner, payload):
                 return
             if turn is not None:
                 turn["started"] = True
+            owner.user_speaking = True
             owner.stats["pipeline"]["provider_start_events"] += 1
             owner.event("FluxStartOfTurn", turn=turn_index)
             await owner.worker.queue_frame(ProposedUserStartedSpeakingFrame())
@@ -339,6 +362,7 @@ async def provider_event(owner, payload):
             raise ValueError("Flux transcript is invalid or exceeds the session limit")
         if turn is not None:
             turn["ended"] = True
+        owner.user_speaking = False
         owner.stats["pipeline"]["provider_end_events"] += 1
         owner.event("FluxEndOfTurn", turn=turn_index)
         frames = []

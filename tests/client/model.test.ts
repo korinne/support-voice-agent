@@ -15,89 +15,88 @@ const call = (patch: Partial<CallView>): CallView => ({
   phase: 'connected',
   microphoneActive: true,
   connectedAt: 1,
-  status: 'Connected. Say hello.',
+  status: 'Connected.',
   ...patch,
 });
 
 describe('stage presentation', () => {
-  it('invites the user by the assistant name before a call and mentions tools only when enabled', () => {
-    expect(describeStage(idleCall(), 'Matt', true)).toMatchObject({
+  it('invites the caller by the assistant name and reminds them of their problem', () => {
+    const caller = { name: 'Maya Chen', hint: 'Her umbrella arrived with a bent rib.' };
+    expect(describeStage(idleCall(), 'Matt', caller)).toMatchObject({
       heading: 'Talk to Matt',
-      subheading: expect.stringContaining('time or weather'),
+      subheading: "You're calling as Maya Chen. Her umbrella arrived with a bent rib.",
       controls: 'start',
       microphone: 'hidden',
       showHeadphonesTip: true,
       showTimer: false,
     });
-    expect(describeStage(idleCall(), '  ', false)).toMatchObject({
+    expect(describeStage(idleCall(), '  ')).toMatchObject({
       heading: 'Talk to your assistant',
-      subheading: expect.not.stringContaining('weather'),
+      subheading: expect.stringContaining('order'),
     });
-    expect(describeStage(idleCall(), 'Matt', true, 600).subheading).toContain('10 minutes');
+    expect(describeStage(idleCall(), 'Matt', caller, 600).subheading).toContain('10 minutes');
   });
 
   it('spells out each phase of a call', () => {
-    expect(describeStage(call({ phase: 'connecting' }), 'Matt', true)).toMatchObject({
+    expect(describeStage(call({ phase: 'connecting' }), 'Matt')).toMatchObject({
       heading: 'Getting connected',
       activity: 'connecting',
       controls: 'cancel',
       microphone: 'live',
     });
-    expect(
-      describeStage(call({ phase: 'ending', microphoneActive: false }), 'Matt', true),
-    ).toMatchObject({
-      heading: 'Ending your call',
-      controls: 'ending',
-      microphone: 'off',
-    });
-    expect(
-      describeStage(call({ phase: 'ended', microphoneActive: false }), 'Matt', true),
-    ).toMatchObject({
+    expect(describeStage(call({ phase: 'ending', microphoneActive: false }), 'Matt')).toMatchObject(
+      {
+        heading: 'Ending your call',
+        controls: 'ending',
+        microphone: 'off',
+      },
+    );
+    expect(describeStage(call({ phase: 'ended', microphoneActive: false }), 'Matt')).toMatchObject({
       heading: 'Call ended',
       controls: 'start',
       microphone: 'hidden',
       showTimer: true,
     });
     const neverConnected = { ...idleCall(), phase: 'ended' as const, error: 'No connection.' };
-    expect(describeStage(neverConnected, 'Matt', true).showTimer).toBe(false);
+    expect(describeStage(neverConnected, 'Matt').showTimer).toBe(false);
   });
 
   it('describes who is talking during a call', () => {
-    expect(describeStage(call({ activity: 'listening' }), 'Matt', true)).toMatchObject({
+    expect(describeStage(call({ activity: 'listening' }), 'Matt')).toMatchObject({
       heading: 'Listening to you',
       activity: 'listening',
       controls: 'call',
     });
-    expect(describeStage(call({ activity: 'speaking' }), 'Matt', true)).toMatchObject({
+    expect(describeStage(call({ activity: 'speaking' }), 'Matt')).toMatchObject({
       heading: 'Matt is speaking',
       activity: 'speaking',
     });
-    expect(describeStage(call({ activity: 'thinking' }), 'Matt', true)).toMatchObject({
+    expect(describeStage(call({ activity: 'thinking' }), 'Matt')).toMatchObject({
       heading: 'Matt is thinking',
     });
-    expect(describeStage(call({ activity: 'tool' }), 'Matt', true)).toMatchObject({
+    expect(describeStage(call({ activity: 'tool' }), 'Matt')).toMatchObject({
       heading: 'Looking that up',
       activity: 'looking it up',
     });
   });
 
   it('lets a muted microphone take over the listening state but not the assistant turn', () => {
-    expect(describeStage(call({ muted: true }), 'Matt', true)).toMatchObject({
+    expect(describeStage(call({ muted: true }), 'Matt')).toMatchObject({
       heading: 'Your microphone is muted',
       activity: 'muted',
       subheading: "Unmute whenever you're ready.",
       microphone: 'muted',
     });
-    expect(describeStage(call({ muted: true, activity: 'speaking' }), 'Matt', true)).toMatchObject({
+    expect(describeStage(call({ muted: true, activity: 'speaking' }), 'Matt')).toMatchObject({
       heading: 'Matt is speaking',
       microphone: 'muted',
     });
   });
 
   it('surfaces blocked playback only during a call', () => {
-    expect(describeStage(call({ playbackBlocked: true }), 'Matt', true).showEnableAudio).toBe(true);
+    expect(describeStage(call({ playbackBlocked: true }), 'Matt').showEnableAudio).toBe(true);
     expect(
-      describeStage(call({ phase: 'ended', playbackBlocked: true }), 'Matt', true).showEnableAudio,
+      describeStage(call({ phase: 'ended', playbackBlocked: true }), 'Matt').showEnableAudio,
     ).toBe(false);
   });
 });

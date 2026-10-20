@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 
 [[package]]
@@ -1131,45 +1131,6 @@ wheels = [
 ]
 
 [[package]]
-name = "realtime-pipecat-voice-agent"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "docopt" },
-    { name = "httpx2" },
-    { name = "itsdangerous" },
-    { name = "mcp-types" },
-    { name = "pipecat-ai" },
-    { name = "werkzeug" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-    { name = "workers-py" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "docopt", path = "vendor/docopt-0.6.2-py3-none-any.whl" },
-    { name = "httpx2", specifier = "==2.13.1" },
-    { name = "itsdangerous", specifier = "==2.2.0" },
-    { name = "mcp-types", specifier = "==2.3.0" },
-    { name = "pipecat-ai", path = "vendor/pipecat_ai-1.12.0+workersprofile.5-py3-none-any.whl" },
-    { name = "werkzeug", specifier = ">=3.1,<4" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8,<10" },
-    { name = "pytest-asyncio", specifier = ">=1,<2" },
-    { name = "ruff", specifier = ">=0.14,<1" },
-    { name = "workers-py", specifier = "==1.17.6" },
-]
-
-[[package]]
 name = "rich"
 version = "15.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1230,6 +1191,45 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/b8/38/bad15a9e615215c8219652ca554b601663ac3b7ac82a284aca53ec2ff48c/soxr-0.5.0.post1-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:bd052a66471a7335b22a6208601a9d0df7b46b8d087dce4ff6e13eed6a33a2a1", size = 216564, upload-time = "2024-08-31T03:43:20.789Z" },
     { url = "https://files.pythonhosted.org/packages/e1/1a/569ea0420a0c4801c2c8dd40d8d544989522f6014d51def689125f3f2935/soxr-0.5.0.post1-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a3f16810dd649ab1f433991d2a9661e9e6a116c2b4101039b53b3c3e90a094fc", size = 248455, upload-time = "2024-08-31T03:43:22.165Z" },
     { url = "https://files.pythonhosted.org/packages/bc/10/440f1ba3d4955e0dc740bbe4ce8968c254a3d644d013eb75eea729becdb8/soxr-0.5.0.post1-cp312-abi3-win_amd64.whl", hash = "sha256:b1be9fee90afb38546bdbd7bde714d1d9a8c5a45137f97478a83b65e7f3146f6", size = 164937, upload-time = "2024-08-31T03:43:23.671Z" },
+]
+
+[[package]]
+name = "support-voice-agent"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "docopt" },
+    { name = "httpx2" },
+    { name = "itsdangerous" },
+    { name = "mcp-types" },
+    { name = "pipecat-ai" },
+    { name = "werkzeug" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+    { name = "workers-py" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "docopt", path = "vendor/docopt-0.6.2-py3-none-any.whl" },
+    { name = "httpx2", specifier = "==2.13.1" },
+    { name = "itsdangerous", specifier = "==2.2.0" },
+    { name = "mcp-types", specifier = "==2.3.0" },
+    { name = "pipecat-ai", path = "vendor/pipecat_ai-1.12.0+workersprofile.5-py3-none-any.whl" },
+    { name = "werkzeug", specifier = ">=3.1,<4" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "pytest-asyncio", specifier = ">=1,<2" },
+    { name = "ruff", specifier = ">=0.14,<1" },
+    { name = "workers-py", specifier = "==1.17.6" },
 ]
 
 [[package]]

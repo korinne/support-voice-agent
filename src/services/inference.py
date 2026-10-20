@@ -1,6 +1,7 @@
 """Workers AI requests: classified failures and one retry within one deadline."""
 
 import asyncio
+import json
 import re
 
 from pipecat.utils.errors import (
@@ -16,6 +17,14 @@ REQUEST_TIMEOUT_SECONDS = 25
 RETRY_DELAY_SECONDS = 0.3
 
 
+class ProviderError(RuntimeError):
+    """An error response, with the message the AI binding gives the errors it raises."""
+
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.status = status
+
+
 class InferenceError(RuntimeError):
     def __init__(self, category, *, status=None, code=None):
         super().__init__("Workers AI inference failed")
@@ -26,6 +35,33 @@ class InferenceError(RuntimeError):
         return (
             self.category in {ErrorCategory.CONNECTIVITY, ErrorCategory.SERVER} or self.code == 3040
         )
+
+
+def type_name(value):
+    """Names a JavaScript or Python value's type without reading its contents."""
+    try:
+        return str(value.constructor.name)[:40]
+    except Exception:
+        return type(value).__name__
+
+
+async def provider_error(native, status):
+    """Reads an error response the way the binding does before it raises.
+
+    The message only classifies the failure. It is never logged.
+    """
+    message = ""
+    try:
+        async with asyncio.timeout(2):
+            message = str(await native.text())[:4096]
+        body = json.loads(message)
+        if body.get("internalCode"):
+            message = f"{body['internalCode']}: {body.get('description', '')}"
+        elif body.get("errors"):
+            message = f"{body['errors'][0].get('code')}: {body['errors'][0].get('message', '')}"
+    except Exception:
+        pass
+    return ProviderError(message, status)
 
 
 def inference_error(exc):
@@ -58,9 +94,17 @@ def inference_error(exc):
 
 
 async def run_inference(
-    ai, model, inputs, options, *, log, is_current, timeout=REQUEST_TIMEOUT_SECONDS
+    ai, model, inputs, options, *, log, is_current, timeout=REQUEST_TIMEOUT_SECONDS, raw=False
 ):
-    """Retry the request, never audio playback, model parsing, or tool execution."""
+    """Retry the request, never audio playback, model parsing, or tool execution.
+
+    Returns the JSON body, or with raw=True the HTTP response for streaming.
+    """
+    # The binding keeps the options of the request that started last and reads
+    # them again when each response arrives. One request without this flag can
+    # turn another's response into parsed JSON or a bare stream. Flux's websocket
+    # option counts as raw too, so every caller gets the result it expects.
+    options = {**options, "returnRawResponse": True}
     try:
         async with asyncio.timeout(timeout):
             for attempt in range(2):
@@ -68,19 +112,19 @@ async def run_inference(
                     raise asyncio.CancelledError()
                 try:
                     response = await ai.run(model, inputs, options)
-                    if options.get("returnRawResponse"):
-                        native = getattr(response, "js_response", response)
-                        status = int(native.status)
-                        if status != 200:
-                            # Discard an error body without reading/logging its payload.
-                            if native.body is not None:
-                                try:
-                                    async with asyncio.timeout(2):
-                                        await native.body.cancel()
-                                except Exception:
-                                    pass
-                            raise InferenceError(classify_http_status_code(status), status=status)
-                    return response
+                    native = getattr(response, "js_response", response)
+                    status = getattr(native, "status", None)
+                    if status is None:
+                        # Something other than an HTTP response. Retry it like a
+                        # server error instead of failing the call.
+                        log.warning("provider_unexpected_response", response_type=type_name(native))
+                        raise InferenceError(ErrorCategory.SERVER)
+                    status = int(status)
+                    if status != 200:
+                        raise await provider_error(native, status)
+                    if raw:
+                        return response
+                    return json.loads(str(await native.text()))
                 except Exception as exc:
                     error = inference_error(exc)
                     if attempt or not error.retryable:

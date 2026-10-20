@@ -1,16 +1,23 @@
 import { z } from 'zod';
 
 const errorMessages: Record<string, string> = {
-  incorrect_password: "That access code didn't work. Please try again.",
-  login_required: 'Your session expired. Enter the access code to start another call.',
+  sign_in_cancelled: 'Sign-in was cancelled. Sign in with Cloudflare to call Acme support.',
+  sign_in_expired: 'That sign-in expired. Please try again.',
+  sign_in_failed: "Cloudflare sign-in didn't finish. Please try again.",
+  login_required: 'Your session expired. Sign in again to start another call.',
   setup_required: 'The app needs its server credentials before it can take calls.',
-  too_many_attempts: 'Too many access-code attempts. Wait a minute and try again.',
   too_many_calls: 'Please wait a minute before starting another call.',
   sfu_unavailable: 'The audio connection could not be established. Please try again.',
   sfu_request_failed: 'The audio service could not finish connecting. Please try again.',
   session_error: 'The voice agent encountered a problem. Please start a new call.',
   service_unavailable: 'The service is temporarily unavailable. Please try again.',
   call_ended: 'This call has ended. You can start a new one.',
+  call_already_exists: 'This call started as a different customer. Start a new call.',
+  staff_login_required: 'Your staff sign-in expired. Reload the page to sign in again.',
+  staff_login_unavailable: "Cloudflare Access couldn't be reached. Try again in a moment.",
+  desk_not_configured:
+    'The staff desk needs Cloudflare Access. Set ACCESS_TEAM_DOMAIN and ACCESS_AUD as described in docs/deployment.md.',
+  already_decided: 'Someone already decided this request.',
 };
 
 export class ApiError extends Error {
@@ -36,7 +43,8 @@ export async function request<T>(
   options: { body?: unknown; signal?: AbortSignal; timeout?: number; keepalive?: boolean } = {},
 ): Promise<T> {
   const timeout = AbortSignal.timeout(options.timeout ?? 45_000);
-  const response = await fetch(`/api/${path}`, {
+  // Paths starting with a slash are absolute, such as the staff desk's /desk/api/.
+  const response = await fetch(path.startsWith('/') ? path : `/api/${path}`, {
     method: options.body === undefined ? 'GET' : 'POST',
     credentials: 'same-origin',
     cache: 'no-store',

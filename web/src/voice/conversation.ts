@@ -1,37 +1,24 @@
+import { WANTS_PERSON, capitalize, money, percent, urgency } from '../lib/format';
 import type { ToolEvent, ToolSource, VoiceEvent } from '../lib/contracts';
 
 export type ToolDefinition = {
   name: string;
   label: string;
-  icon: 'clock' | 'weather' | 'docs' | 'page' | 'status' | 'web' | 'tool';
+  icon: 'account' | 'help' | 'cancel' | 'ticket' | 'credit' | 'tool';
 };
 
 const tools = new Map<string, ToolDefinition>([
+  ['get_account', { name: 'get_account', label: 'Look up your account', icon: 'account' }],
   [
-    'get_weather_forecast',
-    { name: 'get_weather_forecast', label: 'Check weather forecast', icon: 'weather' },
+    'search_help_center',
+    { name: 'search_help_center', label: 'Search the help center', icon: 'help' },
   ],
+  ['cancel_order', { name: 'cancel_order', label: 'Cancel an order', icon: 'cancel' }],
+  ['open_ticket', { name: 'open_ticket', label: 'Open a support ticket', icon: 'ticket' }],
   [
-    'get_current_time',
-    { name: 'get_current_time', label: 'Check the current time', icon: 'clock' },
+    'request_store_credit',
+    { name: 'request_store_credit', label: 'Request store credit', icon: 'credit' },
   ],
-  [
-    'get_current_weather',
-    { name: 'get_current_weather', label: 'Check current weather', icon: 'weather' },
-  ],
-  [
-    'search_cloudflare_documentation',
-    { name: 'search_cloudflare_documentation', label: 'Search Cloudflare docs', icon: 'docs' },
-  ],
-  [
-    'read_cloudflare_documentation',
-    { name: 'read_cloudflare_documentation', label: 'Read Cloudflare docs', icon: 'page' },
-  ],
-  [
-    'get_cloudflare_status',
-    { name: 'get_cloudflare_status', label: 'Check Cloudflare status', icon: 'status' },
-  ],
-  ['search_web', { name: 'search_web', label: 'Search the web', icon: 'web' }],
 ]);
 
 export function describeTool(name: string): ToolDefinition {
@@ -45,8 +32,12 @@ export type ConversationEntry =
   | { kind: 'user'; id: string; text: string }
   | { kind: 'assistant'; id: string; generation: number; text: string; status: AssistantStatus }
   | ({ kind: 'tool'; id: string; tool: ToolDefinition } & (
-      { status: 'complete'; sources?: ToolSource[] } | { status: Exclude<ToolStatus, 'complete'> }
-    ));
+      | { status: 'complete'; summary?: string; sources?: ToolSource[] }
+      | { status: 'empty'; summary?: string }
+      | { status: Exclude<ToolStatus, 'complete' | 'empty'> }
+    ))
+  // Updates from outside the conversation: a staff decision or a ticket's routing.
+  | { kind: 'notice'; id: string; icon: 'approved' | 'declined' | 'routed'; text: string };
 
 const completion = {
   tool_finished: 'complete',
@@ -72,10 +63,14 @@ export function applyToolEvent(
   }
   const current = history.find((entry) => entry.kind === 'tool' && entry.id === id);
   if (!current || current.kind !== 'tool' || current.status !== 'running') return history;
-  const updated: ConversationEntry =
-    event.type === 'tool_finished'
-      ? { ...current, status: 'complete', sources: event.sources }
-      : { ...current, status: completion[event.type] };
+  let updated: ConversationEntry;
+  if (event.type === 'tool_finished') {
+    updated = { ...current, status: 'complete', summary: event.summary, sources: event.sources };
+  } else if (event.type === 'tool_empty') {
+    updated = { ...current, status: 'empty', summary: event.summary };
+  } else {
+    updated = { ...current, status: completion[event.type] };
+  }
   return history.map((entry) => (entry === current ? updated : entry));
 }
 
@@ -136,6 +131,31 @@ export function applyConversationEvent(
           ? { ...entry, status: speechStatuses[event.type] }
           : entry,
       );
+    case 'approval_decided': {
+      const id = `approval-${event.request_id}`;
+      if (history.some((entry) => entry.id === id)) return history;
+      const entry: ConversationEntry = {
+        kind: 'notice',
+        id,
+        icon: event.status,
+        text: `Acme support ${event.status} ${money(event.amount_cents)} credit on order ${event.order_id}.`,
+      };
+      return [...history, entry];
+    }
+    case 'ticket_triaged': {
+      const id = `triage-${event.ticket_id}`;
+      if (history.some((entry) => entry.id === id)) return history;
+      const person = event.wants_person >= WANTS_PERSON ? ' The customer asked for a person.' : '';
+      const entry: ConversationEntry = {
+        kind: 'notice',
+        id,
+        icon: 'routed',
+        text:
+          `Clef routed ticket ${event.ticket_id} to ${capitalize(event.team)} ` +
+          `(${percent(event.team_confidence)} sure). Urgency: ${urgency(event.urgency)}.${person}`,
+      };
+      return [...history, entry];
+    }
     case 'clear':
       return interruptResponses(history, event.generation);
     case 'closing':

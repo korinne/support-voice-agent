@@ -5,9 +5,14 @@ import './styles.css';
 // Vite replaces this constant at build time. Preview fixtures and controls are
 // only imported by the UI dev server and are absent from deployment bundles.
 async function mount() {
+  const desk = location.pathname === '/desk' || location.pathname.startsWith('/desk/');
   const { default: App } = __VOICE_PREVIEW__
-    ? await import('./preview/PreviewApp')
-    : await import('./App');
+    ? desk
+      ? await import('./preview/DeskPreview')
+      : await import('./preview/PreviewApp')
+    : desk
+      ? await import('./desk/DeskApp')
+      : await import('./App');
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />

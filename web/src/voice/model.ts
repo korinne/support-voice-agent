@@ -12,7 +12,6 @@ export type CallView = {
   playbackBlocked: boolean;
   userLevel: number;
   agentLevel: number;
-  agentName?: string;
   callId?: string;
   startedAt?: number;
   connectedAt?: number;
@@ -111,10 +110,13 @@ export type StageView = {
   showEnableAudio: boolean;
 };
 
+/** The signed-in demo customer and the problem they're calling about. */
+export type Caller = { name: string; hint: string };
+
 export function describeStage(
   view: CallView,
   name: string,
-  toolsEnabled: boolean,
+  caller?: Caller,
   maxCallSeconds?: number,
 ): StageView {
   const agent = name.trim() || 'your assistant';
@@ -132,9 +134,9 @@ export function describeStage(
       return {
         heading: `Talk to ${agent}`,
         subheading:
-          (toolsEnabled
-            ? 'Ask about Cloudflare, check the time or weather, or just say hello.'
-            : 'Ask a question, think something through, or just say hello.') + duration,
+          (caller
+            ? `You're calling as ${caller.name}. ${caller.hint}`.trim()
+            : 'Ask about an order, a return, or a product.') + duration,
         controls: 'start',
         microphone: 'hidden',
         showTimer: false,

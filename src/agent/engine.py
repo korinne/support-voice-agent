@@ -7,11 +7,12 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs
 
 from js import WebSocketPair
+from pipecat.frames.frames import LLMMessagesAppendFrame, TTSSpeakFrame
 from pyodide.ffi import create_proxy
 from workers import Response
 from workers.asgi import acquire_js_buffer
 
-from agent.config import MAX_CALL_SECONDS, STT_KEYTERMS
+from agent.config import MAX_CALL_SECONDS, STT_KEYTERMS, greeting
 from agent.pipeline import provider_event, start_pipeline
 from agent.resources import AgentResources
 from server.observability import exception_fields, log
@@ -22,22 +23,37 @@ from transport.codec import AudioConverter, decode_packet, encode_packet
 
 # Four seconds of 20 ms SFU packets, matching the recognizer's own queue limit.
 MAX_QUEUED_PACKETS = 200
+# How long an app update, such as a staff decision, waits for a pause in the
+# conversation before the agent speaks it anyway.
+ANNOUNCE_WAIT_SECONDS = 20
+# How long the greeting waits for the agent's audio connection before it gives up.
+GREETING_WAIT_SECONDS = 10
 
 
 class VoiceEngine:
-    def __init__(self, ctx, env, config, on_stop, is_present, *, call_id, owner_id):
-        self.ctx, self.env, self.config = ctx, env, config
-        self.resources = AgentResources(env=env, call_id=call_id, owner_id=owner_id)
+    def __init__(self, ctx, env, settings, customer, on_stop, is_present, *, call_id, owner_id):
+        self.ctx, self.env, self.settings, self.customer = ctx, env, settings, customer
+        self.resources = AgentResources(
+            env=env,
+            call_id=call_id,
+            owner_id=owner_id,
+            customer_id=customer["id"],
+            notify=self.notify,
+            background=self.background,
+        )
         self.log = log.bind(call_id=call_id)
         self.on_stop, self.is_present = on_stop, is_present
         self.active = False
         self.pipeline_ready = False
+        self.user_speaking = False
         self.adapter_auth = AdapterAuth()
         self.expires = 0
         self.started_at = time.monotonic()
         self.tasks = set()
         self.flux = None
         self.worker = None
+        self.tts = None
+        self.greeted = False
         self.runner = None
         self.runner_task = None
         self.finish_task = None
@@ -155,6 +171,41 @@ class VoiceEngine:
                 provider_close_code=provider.get("close_code"),
             )
             self.on_stop(reason)
+
+    async def announce(self, text):
+        """Tells the agent about an app event and lets it speak, after a pause."""
+        deadline = time.monotonic() + ANNOUNCE_WAIT_SECONDS
+        while self.active and time.monotonic() < deadline:
+            control = self.control
+            busy = control and (control.llm_pending or control.tts_pending)
+            if self.pipeline_ready and not (self.user_speaking or busy):
+                break
+            await asyncio.sleep(0.25)
+        if not self.active or not self.pipeline_ready:
+            return
+        update = {"role": "user", "content": f"<runtime_context>\n{text}\n</runtime_context>"}
+        await self.worker.queue_frame(LLMMessagesAppendFrame(messages=[update], run_llm=True))
+
+    async def greet(self):
+        """Says hello once the caller can hear the agent, unless they speak first."""
+        if self.greeted:
+            return
+        self.greeted = True
+        deadline = time.monotonic() + GREETING_WAIT_SECONDS
+        while self.active and not self._ready():
+            if time.monotonic() >= deadline:
+                return
+            await asyncio.sleep(0.1)
+        generation = self.control.generation
+        if not self.active or self.user_speaking or generation:
+            return
+        text = greeting(self.customer["name"])
+        # Shown like a model reply. Pipecat adds it to the history once it has
+        # been spoken, so the model knows it already said hello.
+        self.notify({"type": "assistant_response", "text": text, "generation": generation})
+        speech = TTSSpeakFrame(text, append_to_context=True)
+        speech.workers_generation = generation
+        await self.tts.queue_frame(speech)
 
     def publish_pcm(self, pcm_mono48k, generation):
         if not self.active:

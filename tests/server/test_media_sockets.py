@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import pytest
 from conftest import Request
 
-from agent.config import AgentConfig
+from agent.config import CallSettings
 from agent.engine import VoiceEngine
 from transport.codec import encode_packet
 
@@ -48,7 +48,16 @@ class AdapterSocket:
 @pytest.fixture
 def engine(monkeypatch):
     ctx = SimpleNamespace(waitUntil=lambda _: None)
-    engine = VoiceEngine(ctx, None, AgentConfig(), Mock(), lambda: True, call_id=CALL, owner_id="a")
+    engine = VoiceEngine(
+        ctx,
+        None,
+        CallSettings(),
+        {"id": "cus_test", "name": "Test Customer"},
+        Mock(),
+        lambda: True,
+        call_id=CALL,
+        owner_id="a",
+    )
     engine.active = True
     engine.expires = time.time() + 60
     engine.control = SimpleNamespace(generation=0)

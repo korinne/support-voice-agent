@@ -7,32 +7,31 @@ import type { SessionInfo } from '../lib/contracts';
  * this contract; everything specific to a sign-in method lives in a provider
  * module next to this file, selected in `index.ts`.
  *
- * The default provider is the shared access code. To move to Cloudflare
- * Access, which authenticates at the edge before the page loads:
+ * The default provider signs customers in with Cloudflare. The server maps
+ * each verified Cloudflare user to an Acme customer account, so the browser
+ * never chooses whose account the agent uses. A real store would use its own
+ * identity provider the same way.
  *
- * - `session` still reads `/api/session`. If Access redirects an expired
- *   session to its login page, the response is not JSON; detect that and
- *   reauthenticate by navigation instead of surfacing an error.
- * - `signIn` has nothing to exchange. `SignIn` becomes a "Sign in again"
- *   button, and `signIn` navigates to the login URL.
- * - `signOut` navigates to `/cdn-cgi/access/logout`.
- * - Keep the SFU adapter routes (`/media/<call-id>/...`) reachable by the SFU
- *   through an Access bypass policy; their per-call token checks stay in
- *   `src/transport/auth.py`. See `docs/authentication.md` for Access setup.
+ * - `session` reads `/api/session`. A provider that redirects to a login page
+ *   should treat a non-JSON response as "sign in again" rather than an error.
+ * - `signIn` exchanges what `SignIn` collected for a session cookie, or
+ *   navigates to the identity provider and ignores the credential.
+ * - Keep the SFU adapter routes (`/media/<call-id>/...`) reachable without a
+ *   browser login; their per-call token checks stay in `src/transport/auth.py`.
  */
 export type BrowserAuth = {
   /** Read the current session, including whether the server is configured. */
   session(signal: AbortSignal): Promise<SessionInfo>;
-  /**
-   * Establish a session from whatever `SignIn` collected. Edge-authenticated
-   * providers ignore the credential and navigate instead.
-   */
-  signIn(credential: string, signal: AbortSignal): Promise<void>;
+  /** Establish a session from whatever `SignIn` collected. */
+  signIn(credential: SignInCredential, signal: AbortSignal): Promise<void>;
   /** End the session. Edge-authenticated providers may navigate away. */
   signOut(signal: AbortSignal): Promise<void>;
-  /** Rendered in place of the start control while the session is locked. */
+  /** Rendered on the call stage while the session is locked. */
   SignIn: ComponentType<SignInProps>;
 };
+
+/** What a sign-in form collected. Redirect providers collect nothing. */
+export type SignInCredential = Record<string, string>;
 
 export type SignInProps = {
   /** True while a submitted credential is being checked. */
@@ -43,5 +42,7 @@ export type SignInProps = {
    * `aria-invalid` rather than adding a line that moves the layout.
    */
   error?: string;
-  onSubmit: (credential: string) => void;
+  /** The assistant's name, for copy such as "Call Matt". */
+  assistant: string;
+  onSubmit: (credential: SignInCredential) => void;
 };

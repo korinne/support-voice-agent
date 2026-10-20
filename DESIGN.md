@@ -1,7 +1,7 @@
 ---
 version: alpha
-name: Realtime examples
-description: Shared visual system for the Cloudflare Realtime example apps. Matches the video room blueprint in calls-examples so the examples read as one family.
+name: Acme support voice agent
+description: Visual system for the Acme support voice agent's customer page and staff desk. It follows the shared Cloudflare Realtime examples system, which matches the video room blueprint in calls-examples, so the examples read as one family.
 colors:
   primary: 'oklch(55.3% 0.195 38.402)'
   primary-hover: 'oklch(47% 0.157 37.304)'
@@ -149,12 +149,12 @@ components:
     height: 48px
 ---
 
-# Realtime examples design system
+# Acme support voice agent design system
 
 ## Overview
 
-The Realtime examples are small, complete applications that developers read as
-much as they use. The interface should feel professional and approachable:
+This template follows the Realtime examples' shared system. The examples are
+small, complete applications that developers read as much as they use. The interface should feel professional and approachable:
 calm, well spaced, and clearly Cloudflare through a single orange accent, never
 a wall of brand color. One white panel holds the whole task; dark media areas
 sit inside it as insets rather than taking over the page.
@@ -189,8 +189,7 @@ The palette is stone neutrals with one accent.
 ## Typography
 
 System fonts only: Tailwind's default `font-sans` stack for text and
-`font-mono` for identifiers such as room IDs, agent names in the header, call
-timers, and measurements.
+`font-mono` for identifiers such as room IDs, call timers, and measurements.
 
 - **Headlines:** `text-2xl`, `text-3xl` on larger screens, semibold, tight
   tracking. One per screen, stating the current state or task plainly ("Join
@@ -252,8 +251,10 @@ pills or mix sharp and rounded corners in one view.
   on hover, `text-base`. Labels are `text-sm font-medium` above the field;
   helper and error text is `text-sm` below it, red-700 for errors.
 - **Header:** brand icon tile (`size-9 rounded-lg bg-orange-50 text-orange-700`),
-  "Realtime", a stone-300 slash, then a mono identifier. Utilities live on the
-  right as quiet or secondary buttons.
+  the company name ("Acme Corp") in semibold, a stone-300 slash, then the page
+  name in stone-600: the signed-in customer's first name, or their email when
+  Cloudflare has no name, on the customer page, and "Staff desk" on the desk.
+  Utilities such as "Sign out" live on the right as quiet or secondary buttons.
 - **Stage and tiles:** stone-900 inset with stone-800 tiles bordered in
   white/10. Each tile carries a bottom-left chip naming the participant and,
   for the voice agent, what they are doing ("Matt · speaking"). Timers and
@@ -274,7 +275,20 @@ pills or mix sharp and rounded corners in one view.
   and a count badge in stone-100 when useful.
 - **Transcript:** speaker label in `text-xs font-medium` (stone-500 for the
   person, orange-700 for the assistant) above `text-sm leading-6` text. Tool
-  calls are one row: icon, action, and a status word.
+  calls are one row: icon, action, and a status word. A finished tool can add
+  one `text-xs` line under the row, indented to the label: a summary such as
+  "Opened ticket T-4821", or the help article titles it used as sources. App
+  notices, such as Clef routing a ticket or staff deciding a credit request,
+  are one stone-50 line with a status-toned icon (emerald-700 approved, red-700
+  declined, stone-500 routed).
+- **Staff desk:** the same header and panel as the customer page. Credit
+  requests, tickets, and the help center are sections inside the one panel,
+  each a flat list split by dividers, never cards. A pending request shows its
+  decision buttons inline; a decided one shows the outcome as status-toned
+  `text-xs` text. Clef's routing shows as `rounded-full` `text-xs` labels under
+  the ticket: team and confidence, urgency, and "Asked for a person" when Clef
+  is at least 70% sure. Safety tickets and urgency of 2.5 or more use red-50
+  with red-800 text; the rest use stone-100.
 
 ## Do's and Don'ts
 

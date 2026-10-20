@@ -1,13 +1,15 @@
 import asyncio
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from conftest import Request
+from conftest import Request, session_cookie
+from pipecat.frames.frames import TTSSpeakFrame
 
-from agent.config import AgentConfig
+import agent.engine as engine_module
+from agent.config import CallSettings, greeting
 from agent.engine import VoiceEngine
-from server.auth_code import COOKIE, AccessCodeAuth
 from server.call import VoiceCall
 from server.http import ApiError
 
@@ -33,7 +35,8 @@ async def active_call(ctx, env, owner_cookie):
     call.engine = VoiceEngine(
         ctx,
         env,
-        AgentConfig(),
+        CallSettings(),
+        call.state["customer"],
         call.request_finish,
         lambda: True,
         call_id=CALL,
@@ -45,6 +48,72 @@ async def active_call(ctx, env, owner_cookie):
     sfu.cleanup.return_value = True
     call.sfu = lambda: sfu
     return call
+
+
+@pytest.fixture
+def greeter(active_call, monkeypatch):
+    """The call's engine with its audio connection and speech replaced."""
+    engine = active_call.engine
+    engine.control = SimpleNamespace(generation=0)
+    engine.tts = SimpleNamespace(queue_frame=AsyncMock())
+    engine.audio_ready = True
+    monkeypatch.setattr(engine, "_ready", lambda: engine.audio_ready)
+    return engine
+
+
+async def test_the_agent_says_hello_once_the_caller_can_hear_it(greeter):
+    greeter.audio_ready = False
+    task = asyncio.create_task(greeter.greet())
+    await asyncio.sleep(0.15)
+    greeter.tts.queue_frame.assert_not_awaited()
+    greeter.audio_ready = True
+    await asyncio.wait_for(task, 1)
+    await greeter.greet()
+    greeter.tts.queue_frame.assert_awaited_once()
+    speech = greeter.tts.queue_frame.await_args.args[0]
+    assert isinstance(speech, TTSSpeakFrame)
+    assert speech.text == "Hi Maya Chen, this is Matt from Acme support. How can I help?"
+    # The greeting enters the history like a reply, so the model knows it was said.
+    assert speech.append_to_context
+    assert speech.workers_generation == 0
+    shown = [event for event in greeter.client_events if event["type"] == "assistant_response"]
+    assert [(event["text"], event["generation"]) for event in shown] == [(speech.text, 0)]
+
+
+async def test_a_caller_without_a_first_name_still_gets_a_greeting():
+    assert greeting("") == "Hi, this is Matt from Acme support. How can I help?"
+
+
+@pytest.mark.parametrize("caller", ["speaking", "spoke"])
+async def test_the_agent_does_not_talk_over_a_caller_who_spoke_first(greeter, caller):
+    if caller == "speaking":
+        greeter.user_speaking = True
+    else:
+        greeter.control.generation = 1
+    await greeter.greet()
+    greeter.tts.queue_frame.assert_not_awaited()
+    assert not greeter.client_events
+
+
+async def test_the_greeting_gives_up_without_an_audio_connection(greeter, monkeypatch):
+    monkeypatch.setattr(engine_module, "GREETING_WAIT_SECONDS", 0.05)
+    greeter.audio_ready = False
+    await asyncio.wait_for(greeter.greet(), 1)
+    greeter.tts.queue_frame.assert_not_awaited()
+
+
+async def test_the_greeting_starts_when_the_browser_can_receive_audio(
+    active_call, owner_cookie, monkeypatch
+):
+    call = active_call
+    greet = AsyncMock()
+    monkeypatch.setattr(VoiceEngine, "greet", greet)
+    call.state["responses"]["subscribe"] = {"fingerprint": "", "response": {}}
+    call.sfu().renegotiate.return_value = {}
+    response = await call.fetch(Request(BASE + "/renegotiate", ANSWER, cookie=owner_cookie))
+    assert response.status == 200
+    await asyncio.sleep(0)
+    greet.assert_awaited_once()
 
 
 async def test_event_poll_waits_for_changes_and_replays_from_the_cursor(active_call, owner_cookie):
@@ -94,7 +163,7 @@ async def test_event_poll_timeout_returns_current_state(active_call, owner_cooki
 async def test_every_call_operation_requires_its_owner(ctx, env, owner_cookie):
     call = VoiceCall(ctx, env)
     assert (await call.fetch(Request(BASE + "/create", {}, cookie=owner_cookie))).status == 201
-    intruder = f"{COOKIE}={AccessCodeAuth(env).signer().dumps('c' * 32)}"
+    intruder = session_cookie(env, owner="c" * 32)
     for action in ("status", "events", "publish", "attach", "subscribe", "renegotiate", "finish"):
         request = Request(
             BASE + "/" + action, None if action in ("status", "events") else {}, cookie=intruder
@@ -245,3 +314,26 @@ async def test_owner_stop_invalidates_setup_while_waiting_for_the_lock(ctx, env,
     assert call.stopping
     call.lock.release()
     assert (await stop).data["cleanup_complete"]
+
+
+async def test_a_staff_decision_is_announced_only_on_the_customers_live_call(active_call):
+    call = active_call
+    call.engine.announce = AsyncMock()
+    decision = {
+        "request_id": "R-1234",
+        "customer_id": "cus_maya",
+        "order_id": "A-1042",
+        "amount_cents": 1000,
+        "status": "approved",
+    }
+    assert not await call.approval_decided({**decision, "customer_id": "cus_sam"})
+    assert await call.approval_decided(decision)
+    await asyncio.gather(*call.engine.tasks)
+    notices = [event for event in call.engine.client_events if event["type"] == "approval_decided"]
+    assert len(notices) == 1 and notices[0]["request_id"] == "R-1234"
+    call.engine.announce.assert_awaited_once_with(
+        "A member of the Acme support team approved credit request R-1234 for $10.00 on order "
+        "A-1042. The credit is on the customer's account now."
+    )
+    call.engine.active = False
+    assert not await call.approval_decided(decision)

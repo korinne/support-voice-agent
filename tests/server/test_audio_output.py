@@ -5,6 +5,7 @@ from collections import deque
 from types import SimpleNamespace
 
 import pytest
+from conftest import RawResponse
 from pipecat.frames.frames import (
     FunctionCallResultFrame,
     InterruptionFrame,
@@ -31,7 +32,7 @@ from pipecat.workers.runner import WorkerRunner
 
 import services.inference as inference_module
 import services.tts as tts_module
-from agent.config import LLM_MODEL, AgentConfig
+from agent.config import LLM_MODEL, system_prompt
 from agent.pipeline import handle_pipeline_error
 from agent.speech_history import SpeechHistory
 from server.observability import log
@@ -50,6 +51,12 @@ class AudioReader:
         self.error = error
         self.cancelled = False
         self.released = False
+        self.consumed = False
+
+    async def text(self):
+        # run_inference reads an error response's body to classify it.
+        self.consumed = True
+        return ""
 
     async def read(self):
         if self.pcm is None:
@@ -108,20 +115,26 @@ async def output_pipeline(monkeypatch):
     async def synthesize(model, parameters, _options):
         if model == LLM_MODEL:
             run.model_requests.append(copy.deepcopy(parameters))
-            return {
-                "choices": [
-                    {
-                        "finish_reason": "stop",
-                        "message": {"role": "assistant", "content": run.replies.popleft()},
-                    }
-                ]
-            }
+            return RawResponse(
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "stop",
+                            "message": {"role": "assistant", "content": run.replies.popleft()},
+                        }
+                    ]
+                }
+            )
         run.tts_texts.append(parameters["text"])
         reader = responses.popleft()
+        if reader.status is None:
+            # Something other than an HTTP response, as the binding once returned.
+            return SimpleNamespace(getReader=lambda: reader)
         return SimpleNamespace(
             status=reader.status,
             headers={"Content-Type": "audio/pcm"},
             body=SimpleNamespace(getReader=lambda: reader, cancel=reader.cancel),
+            text=reader.text,
         )
 
     summary = dict(requests=[], errors=[], completed=0, cancelled=0, stale_dropped=0)
@@ -181,7 +194,9 @@ async def output_pipeline(monkeypatch):
 
     monkeypatch.setattr(output, "_pace", pace)
     sink = Sink()
-    context = LLMContext(messages=[{"role": "system", "content": AgentConfig().system_prompt()}])
+    context = LLMContext(
+        messages=[{"role": "system", "content": system_prompt("Test Customer", 0)}]
+    )
     pair = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
@@ -275,7 +290,7 @@ async def test_repeated_barge_in_retains_only_estimated_output_in_next_model_req
     output_pipeline,
 ):
     run = output_pipeline
-    tools = "I can look up weather and search documentation for you. Tools also provide current information."
+    tools = "I can look up returns and search documentation for you. Tools also provide current information."
     planets = "Planets orbit stars and our solar system has eight planets with very different environments."
     stopped = "Sure, we can stay with planets."
     pcm = b"\x01\0" * (FRAME_BYTES // 2)
@@ -296,7 +311,7 @@ async def test_repeated_barge_in_retains_only_estimated_output_in_next_model_req
     messages = run.model_requests[1]["messages"]
     notes = interruption_notes(messages)
     assert len(notes) == 1
-    assert {"role": "assistant", "content": "I can look up weather"} in messages
+    assert {"role": "assistant", "content": "I can look up returns"} in messages
     assert "cutoff is approximate" in notes[0]
     assert "Tools also provide" not in str(messages)
     assert messages[-1] == {"role": "user", "content": "Tell me about planets."}
@@ -356,7 +371,7 @@ async def test_barge_in_before_output_keeps_status_without_unspoken_text(output_
 
 async def test_filler_is_heard_but_stays_out_of_the_replys_spoken_prefix(output_pipeline):
     run = output_pipeline
-    reply = "I can look up weather and search documentation for you."
+    reply = "I can look up returns and search documentation for you."
     pcm = b"\x01\0" * (FRAME_BYTES // 2)
     run.responses.extend([AudioReader(pcm * 25), AudioReader(pcm * 400)])
     run.pause_after = 65  # One second of filler, then 1.6 seconds of the reply.
@@ -375,7 +390,7 @@ async def test_filler_is_heard_but_stays_out_of_the_replys_spoken_prefix(output_
     await ask(run, "Tell me about planets.", "Planets orbit stars.")
     await wait_for(lambda: len(run.model_requests) == 1)
     messages = run.model_requests[0]["messages"]
-    # Counting the filler's second would retain "I can look up weather".
+    # Counting the filler's second would retain "I can look up returns".
     assert {"role": "assistant", "content": "I can look"} in messages
     assert "One sec" not in str(messages)
     run.can_play.set()
@@ -492,7 +507,23 @@ async def test_interrupting_a_full_window_cancels_reader_and_allows_next_reply(o
     assert stopped.cancelled and stopped.released
 
 
-@pytest.mark.parametrize("failure", ["server", "stream_timeout", "empty"])
+async def test_a_fixed_line_plays_without_the_model_and_joins_the_history(output_pipeline):
+    run = output_pipeline
+    pcm = b"\x01\0" * (FRAME_BYTES // 2)
+    run.responses.append(AudioReader(pcm * 10))
+    run.can_play.set()
+    text = "Hi Maya, this is Matt from Acme support. How can I help?"
+    speech = TTSSpeakFrame(text, append_to_context=True)
+    speech.workers_generation = 0
+    await run.tts.queue_frame(speech)
+    await wait_for(lambda: {"role": "assistant", "content": text} in run.context.get_messages())
+    assert run.sent == [(0, pcm)] * 10
+    assert not run.model_requests
+    events = [(event["type"], event["generation"]) for event, _ in run.notifications]
+    assert events == [("audio_started", 0), ("assistant_response_finished", 0)]
+
+
+@pytest.mark.parametrize("failure", ["server", "no_status", "stream_timeout", "empty"])
 async def test_temporary_speech_failure_allows_next_reply(output_pipeline, failure):
     run = output_pipeline
     pcm = b"\x01\0" * (FRAME_BYTES // 2)
@@ -509,15 +540,20 @@ async def test_temporary_speech_failure_allows_next_reply(output_pipeline, failu
     run.notifications.clear()
     failed = {
         "server": AudioReader(None, status=500),
+        "no_status": AudioReader(pcm * 10, status=None),
         "stream_timeout": AudioReader(pcm * 10, error=TimeoutError()),
         "empty": AudioReader(None),
     }[failure]
     run.responses.append(failed)
-    if failure == "server":
-        run.responses.append(AudioReader(None, status=500))
+    if failure in ("server", "no_status"):
+        # The retry fails the same way.
+        run.responses.append(copy.copy(failed))
     await speak(run, "The failed response must not enter history.")
     await wait_for(lambda: any(event["type"] == "clear" for event, _ in run.notifications))
-    assert failed.released or failed.cancelled
+    if failure == "server":
+        assert failed.consumed
+    elif failure != "no_status":
+        assert failed.released or failed.cancelled
     assert [
         (event["type"], event["generation"])
         for event, _ in run.notifications
@@ -591,7 +627,7 @@ async def test_rejected_speech_credentials_reach_the_pipeline_error_handler(outp
     run.can_play.set()
     await speak(run, "This response cannot be synthesized.")
     await wait_for(lambda: bool(run.pipeline_errors))
-    assert reader.cancelled
+    assert reader.consumed
     assert not run.sink.text
     assert not any(event["type"] == "clear" for event, _ in run.notifications)
     assert len(run.tts_texts) == 1

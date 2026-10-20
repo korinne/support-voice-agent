@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from conftest import D1, RawResponse
 from loguru import logger
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.frames.frames import InterruptionFrame, LLMContextFrame, TTSSpeakFrame
@@ -20,13 +21,14 @@ from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.turns.user_turn_strategies import ExternalUserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
-from agent.config import LLM_MODEL
-from agent.fillers import PHRASES, speak_fillers
+import services.llm as llm_module
+from agent.config import LLM_MODEL, system_prompt
+from agent.fillers import HOLD_ON, PHRASES, speak_fillers
+from agent.resources import AgentResources
 from agent.speech_history import SpeechHistory
-from agent.tools import build_tools
+from agent.tools import account_snapshot, build_tools
 from services.llm import WorkersAIAdapter, WorkersAILLM
 from services.models import get_model
-from services.web_search import WEB_SEARCH_TOOL
 
 logger.disable("pipecat")
 
@@ -35,15 +37,15 @@ class Model:
     def __init__(
         self,
         *,
-        tool_name="get_current_time",
+        tool_name="get_account",
         arguments=None,
         rounds=1,
-        text="Here is the current time.",
+        text="Your umbrella was delivered on Monday.",
     ):
         self.requests = []
         self.options = []
         self.tool_name = tool_name
-        self.arguments = arguments if arguments is not None else {"utc_offset_minutes": 0}
+        self.arguments = arguments if arguments is not None else {}
         self.rounds = rounds
         self.text = text
 
@@ -79,7 +81,9 @@ class Model:
         else:
             message = {"role": "assistant", "content": self.text}
             finish_reason = "stop"
-        return {"choices": [{"index": 0, "finish_reason": finish_reason, "message": message}]}
+        return RawResponse(
+            {"choices": [{"index": 0, "finish_reason": finish_reason, "message": message}]}
+        )
 
 
 class Speech(FrameProcessor):
@@ -98,8 +102,63 @@ class Speech(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
+class Background:
+    """Collects a call's detached work so a test can wait for it."""
+
+    def __init__(self):
+        self.tasks = []
+
+    def __call__(self, coroutine, name):
+        self.tasks.append(asyncio.ensure_future(coroutine))
+
+    async def wait(self):
+        await asyncio.gather(*self.tasks)
+
+
+def agent_resources(notify=None, *, customer_id="cus_maya", db=None, background=None):
+    return AgentResources(
+        env=SimpleNamespace(DB=db or D1(), AI=None, AI_SEARCH=None),
+        call_id="test-call",
+        owner_id="test-owner",
+        customer_id=customer_id,
+        notify=notify or (lambda event: None),
+        background=background or Background(),
+    )
+
+
+def conversation(*said):
+    return LLMContext(messages=[{"role": "user", "content": text} for text in said or ["Hi."]])
+
+
+async def invoke(tools, name, arguments, resources, context=None):
+    """Runs one tool handler the way Pipecat does and returns its result."""
+    results = []
+
+    async def callback(result):
+        results.append(result)
+
+    tool = next(tool for tool in tools if tool.name == name)
+    await tool.handler(
+        SimpleNamespace(
+            arguments=arguments,
+            tool_call_id=f"{name}-call",
+            result_callback=callback,
+            app_resources=resources,
+            context=context or conversation(),
+        )
+    )
+    return results[0]
+
+
 async def pipeline(
-    tools, *, model=None, messages=None, adapter=None, utc_offset_minutes=0, fillers=False
+    tools,
+    *,
+    model=None,
+    messages=None,
+    adapter=None,
+    utc_offset_minutes=0,
+    fillers=False,
+    resources=None,
 ):
     model = model or Model()
     summary = {
@@ -123,7 +182,7 @@ async def pipeline(
         speech_history=SpeechHistory(),
         utc_offset_minutes=utc_offset_minutes,
     )
-    messages = messages or [{"role": "user", "content": "What time is it in UTC?"}]
+    messages = messages or [{"role": "user", "content": "Where is my umbrella?"}]
     if not any(message["role"] == "system" for message in messages):
         messages = [{"role": "system", "content": "You are a voice assistant."}, *messages]
     context = LLMContext(messages=messages, tools=tools)
@@ -149,7 +208,7 @@ async def pipeline(
     worker = PipelineWorker(
         Pipeline([pair.user(), llm, speech, pair.assistant()]),
         params=PipelineParams(),
-        app_resources=SimpleNamespace(owner_id="test-owner"),
+        app_resources=resources or agent_resources(),
         enable_rtvi=False,
         idle_timeout_secs=None,
     )
@@ -234,9 +293,10 @@ async def test_native_service_uses_pipecat_tool_results_to_resume_inference(mode
         assert call["content"] == ""
         result = next(message for message in messages if message.get("role") == "tool")
         assert call["tool_calls"][0]["id"] == result["tool_call_id"]
-        assert "datetime" in result["content"]
+        assert json.loads(result["content"])["store_credit"] == "$0.00"
         assert [event["type"] for event in events] == ["tool_started", "tool_finished"]
-        assert run.speech.replies == ["Here is the current time."]
+        assert events[-1]["summary"] == "2 orders, $0.00 store credit"
+        assert run.speech.replies == ["Your umbrella was delivered on Monday."]
         assert not run.summary["errors"]
     finally:
         await close(run)
@@ -256,8 +316,8 @@ async def test_interruption_cancels_a_pending_tool_and_drops_its_reply():
     run = await pipeline(
         [
             FunctionSchema(
-                name="get_current_time",
-                description="Read time",
+                name="get_account",
+                description="Read the account",
                 properties={},
                 required=[],
                 handler=long_tool,
@@ -281,19 +341,19 @@ async def test_lookups_queue_one_filler_that_stays_out_of_the_conversation():
         await params.result_callback({"status": "found", "results": []})
 
     tool = FunctionSchema(
-        name=WEB_SEARCH_TOOL, description="Search", properties={}, required=[], handler=search
+        name="search_help_center", description="Search", properties={}, required=[], handler=search
     )
-    model = Model(tool_name=WEB_SEARCH_TOOL, arguments={}, rounds=2)
+    model = Model(tool_name="search_help_center", arguments={}, rounds=2)
     run = await pipeline([tool], model=model, fillers=True)
     try:
         async with asyncio.timeout(5):
             while len(run.speech.frames) < 2:
                 await asyncio.sleep(0.01)
         filler, reply = run.speech.frames
-        assert filler.text in PHRASES[WEB_SEARCH_TOOL]
+        assert filler.text in PHRASES["search_help_center"]
         assert not filler.append_to_context
         assert filler.workers_generation == 0
-        assert reply.text == "Here is the current time."
+        assert reply.text == "Your umbrella was delivered on Monday."
         assert reply.append_to_context
         # Two lookup rounds in one turn share a single filler.
         assert len(run.model.requests) == 3
@@ -301,44 +361,68 @@ async def test_lookups_queue_one_filler_that_stays_out_of_the_conversation():
         await close(run)
 
 
-async def test_search_retry_and_page_read_preserve_history_with_tool_headroom(monkeypatch):
-    source = {
-        "title": "WebSocket adapters",
-        "url": "https://developers.cloudflare.com/realtime/sfu/features/media-transport-adapters/websocket-adapter/",
-        "excerpt": "Audio is 48 kHz stereo PCM.",
-    }
-    empty = {"status": "empty", "query": "SFU audio format"}
-    found = {"status": "found", "query": "SFU WebSocket PCM", "sources": [source]}
-    lookup = AsyncMock(side_effect=[empty, found])
-    monkeypatch.setattr("agent.tools.search_docs", lookup)
-    page = {"status": "found", "section": "Audio", "sources": [source]}
-    read_page = AsyncMock(return_value=page)
-    monkeypatch.setattr("agent.tools.read_docs_page", read_page)
+async def test_a_slow_reply_gets_a_holding_line_and_one_past_the_limit_a_fallback(monkeypatch):
+    monkeypatch.setattr(llm_module, "HOLD_ON_SECONDS", 0.05)
+    monkeypatch.setattr(llm_module, "LLM_TIMEOUT_SECONDS", 0.5)
+    delays = [0.2, 2]
+
+    class SlowModel(Model):
+        async def run(self, model, parameters, options):
+            await asyncio.sleep(delays.pop(0))
+            return await super().run(model, parameters, options)
+
+    run = await pipeline([], model=SlowModel(rounds=0), fillers=True)
+    try:
+        async with asyncio.timeout(5):
+            while len(run.speech.frames) < 2:
+                await asyncio.sleep(0.01)
+        hold_on, reply = run.speech.frames
+        assert hold_on.text in HOLD_ON
+        assert not hold_on.append_to_context
+        assert reply.text == "Your umbrella was delivered on Monday."
+        run.speech.received.clear()
+        run.context.add_message({"role": "user", "content": "And my sneakers?"})
+        await run.worker.queue_frame(InterruptionFrame())
+        await run.worker.queue_frame(LLMContextFrame(run.context))
+        async with asyncio.timeout(5):
+            while len(run.speech.frames) < 4:
+                await asyncio.sleep(0.01)
+        assert run.speech.frames[2].text in HOLD_ON
+        assert run.speech.replies[-1] == (
+            "Sorry, I lost my train of thought. Could you say that again?"
+        )
+    finally:
+        await close(run)
+
+
+async def test_help_search_retry_and_ticket_preserve_history_with_tool_headroom(monkeypatch):
+    excerpt = {"article": "Shipping and tracking", "excerpt": "We trace a package after 3 days."}
+    search = AsyncMock(side_effect=[[], [excerpt]])
+    monkeypatch.setattr("agent.tools.help_center.search", search)
+    route = {"team": "shipping", "team_confidence": 0.91, "urgency": 1.2, "wants_person": 0.1}
+    triage = AsyncMock(return_value=route)
+    monkeypatch.setattr("agent.tools.triage", triage)
     events = []
+    resources = agent_resources(events.append, customer_id="cus_sam")
     history = [
-        {"role": "user", "content": "My favorite fruit is mango."},
-        {"role": "assistant", "content": "I'll remember that."},
-        {"role": "user", "content": "What audio format does the SFU WebSocket adapter use?"},
+        {"role": "user", "content": "Hi, this is Sam."},
+        {"role": "assistant", "content": "Hi Sam, how can I help?"},
+        {"role": "user", "content": "My sneakers have been stuck in transit."},
     ]
+    ticket = {"summary": "Sneakers stuck", "details": "No scan in 5 days.", "order_id": "a 1057"}
     run = await pipeline(
         build_tools(events.append),
         model=Model(
-            tool_name=[
-                "search_cloudflare_documentation",
-                "search_cloudflare_documentation",
-                "read_cloudflare_documentation",
-            ],
-            arguments=[
-                {"query": empty["query"]},
-                {"query": found["query"]},
-                {"url": source["url"], "section": "Audio"},
-            ],
+            tool_name=["search_help_center", "search_help_center", "open_ticket"],
+            arguments=[{"query": "stuck package"}, {"query": "package trace"}, ticket],
             rounds=3,
         ),
         messages=copy.deepcopy(history),
+        resources=resources,
     )
     try:
         await asyncio.wait_for(run.speech.received.wait(), 5)
+        await resources.background.wait()
         assert len(run.model.requests) == 4
         assert "tools" in run.model.requests[1]
         assert run.model.requests[3].get("tool_choice") != "none"
@@ -347,9 +431,12 @@ async def test_search_retry_and_page_read_preserve_history_with_tool_headroom(mo
         calls = [call for message in messages for call in message.get("tool_calls", [])]
         results = [message for message in messages if message.get("role") == "tool"]
         assert [result["tool_call_id"] for result in results] == [call["id"] for call in calls]
-        assert len(results) == 3
-        assert [json.loads(result["content"]) for result in results] == [empty, found, page]
-        assert [event["type"] for event in events] == [
+        outcomes = [json.loads(result["content"]) for result in results]
+        assert [outcome["status"] for outcome in outcomes] == ["empty", "found", "opened"]
+        ticket_id = outcomes[-1]["ticket_id"]
+        # Triage runs detached, so its update can land before or after the tool's own.
+        updates = [event for event in events if event["type"] != "ticket_triaged"]
+        assert [event["type"] for event in updates] == [
             "tool_started",
             "tool_empty",
             "tool_started",
@@ -357,15 +444,28 @@ async def test_search_retry_and_page_read_preserve_history_with_tool_headroom(mo
             "tool_started",
             "tool_finished",
         ]
-        assert events[-1]["sources"] == [{"title": source["title"], "url": source["url"]}]
-        assert events[-1]["call_id"] == results[-1]["tool_call_id"]
-        assert not run.summary["errors"]
-        assert lookup.await_count == 2
-        read_page.assert_awaited_once()
-        assert [call.args[0].query for call in lookup.call_args_list] == [
-            empty["query"],
-            found["query"],
+        assert updates[3]["sources"] == [{"title": "Shipping and tracking"}]
+        assert updates[5]["summary"] == f"Opened ticket {ticket_id}"
+        assert {"type": "ticket_triaged", "ticket_id": ticket_id, **route} in events
+        assert resources.env.DB.rows(
+            "SELECT customer_id, order_id, call_id, team FROM tickets"
+        ) == [
+            {
+                "customer_id": "cus_sam",
+                "order_id": "A-1057",
+                "call_id": "test-call",
+                "team": "shipping",
+            }
         ]
+        assert [call.args[1] for call in search.call_args_list] == [
+            "stuck package",
+            "package trace",
+        ]
+        assert triage.call_args.args[2] == {
+            "id": "default",
+            "metadata": {"customer_id": "cus_sam", "call_id": "test-call"},
+        }
+        assert not run.summary["errors"]
     finally:
         await close(run)
 
@@ -381,15 +481,12 @@ async def test_parallel_calls_share_the_budget_and_a_new_user_turn_resets_it():
                     {
                         "id": f"batch-{len(self.requests)}-{index}",
                         "type": "function",
-                        "function": {
-                            "name": "get_current_time",
-                            "arguments": '{"utc_offset_minutes":0}',
-                        },
+                        "function": {"name": "get_account", "arguments": "{}"},
                     }
                     for index in range(4)
                 ],
             }
-            return {"choices": [{"finish_reason": "tool_calls", "message": message}]}
+            return RawResponse({"choices": [{"finish_reason": "tool_calls", "message": message}]})
 
     events = []
     run = await pipeline(build_tools(events.append), model=ParallelModel())
@@ -413,7 +510,10 @@ async def test_parallel_calls_share_the_budget_and_a_new_user_turn_resets_it():
             "tool-call limit" not in (message.get("content") or "")
             for message in run.model.requests[3]["messages"]
         )
-        assert run.speech.replies == ["I couldn't finish that response. Please try again."] * 2
+        assert (
+            run.speech.replies
+            == ["Sorry, I lost my train of thought. Could you say that again?"] * 2
+        )
         messages = run.model.requests[-1]["messages"]
         calls = [call["id"] for message in messages for call in message.get("tool_calls", [])]
         results = [message["tool_call_id"] for message in messages if message.get("role") == "tool"]
@@ -475,22 +575,28 @@ async def test_model_failure_speaks_a_fallback_and_accepts_the_next_turn(failure
                 if failure == "api":
                     raise RuntimeError("Private upstream error details")
                 if failure == "context_limit":
-                    raise RuntimeError("400: This model's maximum context length was exceeded")
-                return {
-                    "choices": [
-                        {
-                            "finish_reason": "length",
-                            "message": {"role": "assistant", "content": "Unfinished answer"},
-                        }
-                    ]
-                }
+                    error = {
+                        "internalCode": 5021,
+                        "description": "This model's maximum context length was exceeded",
+                    }
+                    return RawResponse(error, status=400)
+                return RawResponse(
+                    {
+                        "choices": [
+                            {
+                                "finish_reason": "length",
+                                "message": {"role": "assistant", "content": "Unfinished answer"},
+                            }
+                        ]
+                    }
+                )
             return await super().run(model, parameters, options)
 
     run = await pipeline([], model=FailOnceModel(rounds=0))
     try:
         await asyncio.wait_for(run.speech.received.wait(), 5)
         expected = {
-            "api": "I couldn't finish that response. Please try again.",
+            "api": "Sorry, I lost my train of thought. Could you say that again?",
             "incomplete": "That answer got too long. Could you ask me to focus on one part?",
             "context_limit": "This conversation is too long for the model. Please start a new call.",
         }[failure]
@@ -503,7 +609,7 @@ async def test_model_failure_speaks_a_fallback_and_accepts_the_next_turn(failure
         await run.worker.queue_frame(InterruptionFrame())
         await run.worker.queue_frame(LLMContextFrame(run.context))
         await asyncio.wait_for(run.speech.received.wait(), 5)
-        assert run.speech.replies[-1] == "Here is the current time."
+        assert run.speech.replies[-1] == "Your umbrella was delivered on Monday."
         assert len(run.model.requests) == 2
     finally:
         await close(run)
@@ -519,20 +625,15 @@ def test_adapter_keeps_tool_messages_and_rejects_multimodal_content():
 @pytest.mark.parametrize(
     ("name", "arguments"),
     [
-        ("get_current_time", {"utc_offset_minutes": 0}),
-        ("get_current_weather", {"location": "London"}),
-        ("get_weather_forecast", {"location": "London", "start_day": 1}),
-        ("search_cloudflare_documentation", {"query": "Workers limits"}),
-        ("read_cloudflare_documentation", {"url": "https://developers.cloudflare.com/workers/"}),
-        ("get_cloudflare_status", {"product": "Workers"}),
+        ("get_account", {}),
+        ("search_help_center", {"query": "returns"}),
+        ("cancel_order", {"order_id": "A-1061"}),
+        ("open_ticket", {"summary": "Fuel smell", "details": "The pogo stick smells of fuel."}),
+        ("request_store_credit", {"order_id": "A-1033", "amount": 20, "reason": "Dented tank"}),
     ],
 )
 async def test_each_tool_reports_interruption_during_result_delivery(monkeypatch, name, arguments):
-    monkeypatch.setattr("agent.tools.current_weather", AsyncMock(return_value={"temperature": 15}))
-    monkeypatch.setattr("agent.tools.search_docs", AsyncMock(return_value={"sources": []}))
-    monkeypatch.setattr("agent.tools.read_docs_page", AsyncMock(return_value={"sources": []}))
-    monkeypatch.setattr("agent.tools.weather_forecast", AsyncMock(return_value={"days": []}))
-    monkeypatch.setattr("agent.tools.cloudflare_status", AsyncMock(return_value={"sources": []}))
+    monkeypatch.setattr("agent.tools.help_center.search", AsyncMock(return_value=[]))
     delivering = asyncio.Event()
 
     async def callback(_result):
@@ -540,10 +641,19 @@ async def test_each_tool_reports_interruption_during_result_delivery(monkeypatch
         await asyncio.Event().wait()
 
     events = []
+    resources = agent_resources(
+        events.append, customer_id="cus_rosa", background=lambda coroutine, _: coroutine.close()
+    )
     tool = next(tool for tool in build_tools(events.append) if tool.name == name)
     task = asyncio.create_task(
         tool.handler(
-            SimpleNamespace(arguments=arguments, tool_call_id="lookup", result_callback=callback)
+            SimpleNamespace(
+                arguments=arguments,
+                tool_call_id="lookup",
+                result_callback=callback,
+                app_resources=resources,
+                context=conversation(),
+            )
         )
     )
     await asyncio.wait_for(delivering.wait(), 1)
@@ -552,3 +662,135 @@ async def test_each_tool_reports_interruption_during_result_delivery(monkeypatch
         await task
     assert [event["type"] for event in events] == ["tool_started", "tool_cancelled"]
     assert all(event["call_id"] == "lookup" and event["name"] == name for event in events)
+
+
+async def test_tools_act_only_on_the_signed_in_customers_orders():
+    db = D1()
+    tools = build_tools(lambda event: None)
+    sam = agent_resources(customer_id="cus_sam", db=db)
+    credit = {"order_id": "A-1042", "amount": 10, "reason": "Bent rib"}
+    assert (await invoke(tools, "cancel_order", {"order_id": "A-1061"}, sam))["code"] == (
+        "order_not_found"
+    )
+    assert (await invoke(tools, "request_store_credit", credit, sam))["code"] == "order_not_found"
+    account = await invoke(tools, "get_account", {}, sam)
+    assert [order["order_id"] for order in account["orders"]] == ["A-1057"]
+    assert db.rows("SELECT status FROM orders WHERE id = 'A-1061'") == [{"status": "processing"}]
+    assert db.rows("SELECT id FROM approvals") == []
+
+
+def order_status(db, order_id):
+    return db.rows(f"SELECT status FROM orders WHERE id = '{order_id}'")[0]["status"]
+
+
+async def test_cancel_order_waits_for_a_yes_in_the_customers_next_turn():
+    db = D1()
+    tools = build_tools(lambda event: None)
+    rosa = agent_resources(customer_id="cus_rosa", db=db)
+    context = conversation("Cancel my tunnel kit.")
+    asked = await invoke(tools, "cancel_order", {"order_id": "a 1061"}, rosa, context)
+    assert asked["status"] == "needs_confirmation"
+    assert asked["order"]["order_id"] == "A-1061"
+    assert asked["order"]["total"] == "$45.00"
+    # Calling again in the same turn, or after an app update, isn't a yes.
+    again = await invoke(tools, "cancel_order", {"order_id": "A-1061"}, rosa, context)
+    assert again["status"] == "needs_confirmation"
+    context.add_message(
+        {"role": "user", "content": "<runtime_context>\nAn update.\n</runtime_context>"}
+    )
+    again = await invoke(tools, "cancel_order", {"order_id": "A-1061"}, rosa, context)
+    assert again["status"] == "needs_confirmation"
+    assert order_status(db, "A-1061") == "processing"
+    context.add_message({"role": "user", "content": "Yes, cancel it."})
+    cancelled = await invoke(tools, "cancel_order", {"order_id": "A1061"}, rosa, context)
+    assert cancelled == {"status": "cancelled", "order_id": "A-1061", "refund": "$45.00"}
+    assert order_status(db, "A-1061") == "cancelled"
+
+
+async def test_a_read_back_expires_after_the_customers_next_turn():
+    db = D1()
+    tools = build_tools(lambda event: None)
+    rosa = agent_resources(customer_id="cus_rosa", db=db)
+    context = conversation("Cancel my tunnel kit.")
+    await invoke(tools, "cancel_order", {"order_id": "A-1061"}, rosa, context)
+    context.add_message({"role": "user", "content": "Hmm, let me think."})
+    context.add_message({"role": "user", "content": "Okay, go ahead."})
+    # Two turns later, Matt has to read the order back again.
+    asked = await invoke(tools, "cancel_order", {"order_id": "A-1061"}, rosa, context)
+    assert asked["status"] == "needs_confirmation"
+    assert order_status(db, "A-1061") == "processing"
+
+
+async def test_cancel_order_only_cancels_orders_that_havent_shipped():
+    db = D1()
+    tools = build_tools(lambda event: None)
+    rosa = agent_resources(customer_id="cus_rosa", db=db)
+    context = conversation("Cancel my tunnel kit.")
+    await invoke(tools, "cancel_order", {"order_id": "A-1061"}, rosa, context)
+    context.add_message({"role": "user", "content": "Yes."})
+    cancelled = await invoke(tools, "cancel_order", {"order_id": "A-1061"}, rosa, context)
+    assert cancelled["status"] == "cancelled"
+    # An order that can't be cancelled fails at once, before any read-back.
+    again = await invoke(tools, "cancel_order", {"order_id": "A-1061"}, rosa)
+    assert again["code"] == "not_cancellable"
+    delivered = await invoke(tools, "cancel_order", {"order_id": "A-1033"}, rosa)
+    assert delivered["code"] == "not_cancellable"
+
+
+async def test_store_credit_stays_pending_until_staff_decide():
+    db = D1()
+    tools = build_tools(lambda event: None)
+    maya = agent_resources(customer_id="cus_maya", db=db)
+    request = {"order_id": "1042", "amount": 10.5, "reason": "The umbrella has a bent rib."}
+    too_high = await invoke(tools, "request_store_credit", {**request, "amount": 50}, maya)
+    assert too_high["code"] == "amount_too_high"
+    invalid = await invoke(tools, "request_store_credit", {**request, "amount": "ten"}, maya)
+    assert invalid["code"] == "invalid_arguments"
+    rosa = agent_resources(customer_id="cus_rosa", db=db)
+    unshipped = {**request, "order_id": "A-1061"}
+    assert (await invoke(tools, "request_store_credit", unshipped, rosa))["code"] == "not_delivered"
+    pending = await invoke(tools, "request_store_credit", request, maya)
+    assert pending["status"] == "pending_approval"
+    assert pending["amount"] == "$10.50"
+    assert db.rows(
+        "SELECT id, customer_id, order_id, call_id, amount_cents, status FROM approvals"
+    ) == [
+        {
+            "id": pending["request_id"],
+            "customer_id": "cus_maya",
+            "order_id": "A-1042",
+            "call_id": "test-call",
+            "amount_cents": 1050,
+            "status": "pending",
+        }
+    ]
+    assert db.rows("SELECT credit_cents FROM customers WHERE id = 'cus_maya'") == [
+        {"credit_cents": 0}
+    ]
+
+
+async def test_a_failed_triage_leaves_the_ticket_open_and_unrouted(monkeypatch):
+    monkeypatch.setattr("agent.tools.triage", AsyncMock(side_effect=ConnectionError("down")))
+    events = []
+    resources = agent_resources(events.append, customer_id="cus_rosa")
+    details = {"summary": "Fuel smell", "details": "The pogo stick smells of fuel."}
+    opened = await invoke(build_tools(events.append), "open_ticket", details, resources)
+    await resources.background.wait()
+    assert opened["status"] == "opened"
+    assert resources.env.DB.rows("SELECT id, team FROM tickets") == [
+        {"id": opened["ticket_id"], "team": None}
+    ]
+    assert "ticket_triaged" not in [event["type"] for event in events]
+
+
+async def test_the_prompt_carries_the_account_from_the_start_of_the_call():
+    account = await account_snapshot(agent_resources(customer_id="cus_rosa"))
+    assert [order["order_id"] for order in account["orders"]] == ["A-1061", "A-1033"]
+    prompt = system_prompt("Rosa", 0, account)
+    assert '"order_id": "A-1061"' in prompt and "<account>" in prompt
+    assert "Use get_account before discussing any order" not in prompt
+    # Without the account, Matt looks it up first, and no name means none is used.
+    fallback = system_prompt("", 0)
+    assert "<account>" not in fallback
+    assert "Use get_account before discussing any order" in fallback
+    assert "You are talking with a signed-in customer." in fallback

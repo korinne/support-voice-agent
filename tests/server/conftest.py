@@ -1,11 +1,12 @@
 """Native test doubles for the Workers boundary; media tests use the runtime."""
 
 import json
+import sqlite3
 import sys
 from contextlib import nullcontext
 from email.message import Message
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -17,6 +18,16 @@ class Response:
     @classmethod
     def json(cls, data, **kwargs):
         return cls(data, **kwargs)
+
+
+class RawResponse:
+    """What the AI binding returns for a request made with returnRawResponse."""
+
+    def __init__(self, data, status=200):
+        self.data, self.status = data, status
+
+    async def text(self):
+        return json.dumps(self.data)
 
 
 class DurableObject:
@@ -81,6 +92,57 @@ class Reader:
         pass
 
 
+class D1:
+    """SQLite behind D1's prepared-statement API, with the app's real schema."""
+
+    def __init__(self, *, seeded=True):
+        self.connection = sqlite3.connect(":memory:", isolation_level=None)
+        self.connection.row_factory = sqlite3.Row
+        # D1 enforces foreign keys.
+        self.connection.execute("PRAGMA foreign_keys = ON")
+        for migration in sorted((Path(__file__).parents[2] / "migrations").glob("*.sql")):
+            self.connection.executescript(migration.read_text())
+        if seeded:
+            self.connection.executescript((Path(__file__).parent / "seed.sql").read_text())
+
+    def prepare(self, sql):
+        return Statement(self, sql)
+
+    async def batch(self, statements):
+        self.connection.execute("BEGIN")
+        try:
+            results = [statement.execute() for statement in statements]
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+        self.connection.execute("COMMIT")
+        return results
+
+    def rows(self, sql, *params):
+        return [dict(row) for row in self.connection.execute(sql, params)]
+
+
+class Statement:
+    def __init__(self, db, sql, params=()):
+        self.db, self.sql, self.params = db, sql, params
+
+    def bind(self, *params):
+        return Statement(self.db, self.sql, params)
+
+    def execute(self):
+        return {"results": self.db.rows(self.sql, *self.params), "success": True}
+
+    async def all(self):
+        return self.execute()
+
+    async def first(self):
+        rows = self.execute()["results"]
+        return rows[0] if rows else None
+
+    async def run(self):
+        return self.execute()
+
+
 class Storage:
     def __init__(self):
         self.values = {}
@@ -105,11 +167,12 @@ class Storage:
 @pytest.fixture
 def env():
     return SimpleNamespace(
-        APP_PASSWORD="test-password",
+        OAUTH_CLIENT_ID="test-client",
+        OAUTH_CLIENT_SECRET="test-client-secret",
         SESSION_SECRET="test-signing-secret-" * 3,
         REALTIME_APP_ID="test-app",
         REALTIME_AUTH_TOKEN="test-app-token",
-        LOGIN_LIMITER=SimpleNamespace(limit=AsyncMock(return_value=SimpleNamespace(success=True))),
+        DB=D1(),
     )
 
 
@@ -118,8 +181,13 @@ def ctx():
     return SimpleNamespace(storage=Storage(), waitUntil=lambda _: None)
 
 
+def session_cookie(env, owner="a" * 32, customer="cus_maya", email="maya@example.com", name="Maya"):
+    from server.auth_cloudflare import COOKIE, CloudflareAuth
+
+    value = {"owner": owner, "customer": customer, "email": email, "name": name}
+    return f"{COOKIE}={CloudflareAuth(env).signer('session').dumps(value)}"
+
+
 @pytest.fixture
 def owner_cookie(env):
-    from server.auth_code import COOKIE, AccessCodeAuth
-
-    return f"{COOKIE}={AccessCodeAuth(env).signer().dumps('a' * 32)}"
+    return session_cookie(env)

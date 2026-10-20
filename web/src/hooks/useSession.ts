@@ -1,21 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { browserAuth } from '../auth';
+import { browserAuth, type SignInCredential } from '../auth';
 import { ApiError, describeError } from '../lib/api';
-import type { AgentSettings, SessionInfo } from '../lib/contracts';
-import type { SessionState } from '../lib/session';
+import type { SessionInfo } from '../lib/contracts';
+import { setupMessage, type SessionState } from '../lib/session';
 
 function settled(result: SessionInfo): SessionState {
-  if (!result.configured) {
-    return {
-      kind: 'unavailable',
-      message: 'This voice agent needs its server credentials before it can take calls.',
-    };
-  }
+  if (!result.configured)
+    return { kind: 'unavailable', message: setupMessage(result.setup_required) };
   return { kind: result.authenticated ? 'ready' : 'locked' };
 }
 
 function failed(error: unknown): SessionState {
-  if (error instanceof ApiError && [401, 429].includes(error.status)) {
+  if (error instanceof ApiError && [400, 401, 429].includes(error.status)) {
     return { kind: 'locked', error: describeError(error) };
   }
   return { kind: 'unavailable', message: describeError(error) };
@@ -25,9 +21,9 @@ function failed(error: unknown): SessionState {
  * Browser session state machine. It knows nothing about how a session is
  * established; that belongs to the provider in `web/src/auth/`.
  */
-export function useSession(onDefaults: (agent: AgentSettings) => void) {
+export function useSession() {
   const [state, setState] = useState<SessionState>({ kind: 'loading' });
-  const [maxCallSeconds, setMaxCallSeconds] = useState<number>();
+  const [info, setInfo] = useState<SessionInfo>();
   const pending = useRef<AbortController | undefined>(undefined);
 
   // One provider operation at a time; a newer one cancels the older.
@@ -48,37 +44,32 @@ export function useSession(onDefaults: (agent: AgentSettings) => void) {
   );
 
   // Read the session after authentication; local UI state is not proof of access.
-  const settle = useCallback(
-    async (signal: AbortSignal, defaults = false) => {
-      const result = await browserAuth.session(signal);
-      signal.throwIfAborted();
-      setMaxCallSeconds(result.max_call_seconds);
-      if (defaults && result.agent) onDefaults(result.agent);
-      setState(settled(result));
-      return result.configured && result.authenticated;
-    },
-    [onDefaults],
-  );
+  const settle = useCallback(async (signal: AbortSignal) => {
+    const result = await browserAuth.session(signal);
+    signal.throwIfAborted();
+    setInfo(result);
+    setState(settled(result));
+    return result.configured && result.authenticated;
+  }, []);
 
   const check = useCallback(
-    (defaults = false) =>
-      run({ kind: defaults ? 'loading' : 'checking' }, (signal) => settle(signal, defaults)),
+    (initial: SessionState = { kind: 'checking' }) => run(initial, settle),
     [run, settle],
   );
 
   useEffect(() => {
-    void check(true);
+    void check({ kind: 'loading' });
     return () => pending.current?.abort();
   }, [check]);
 
   return {
     state,
-    maxCallSeconds,
+    info,
     refresh: () => check(),
     // Recheck before starting: an expired session must prompt for sign-in
     // before requesting microphone access or allocating a call.
     authorize: () => check(),
-    signIn: (credential: string) =>
+    signIn: (credential: SignInCredential) =>
       run({ kind: 'signing-in' }, async (signal) => {
         await browserAuth.signIn(credential, signal);
         return settle(signal);
@@ -86,8 +77,8 @@ export function useSession(onDefaults: (agent: AgentSettings) => void) {
     signOut: () =>
       run({ kind: 'checking' }, async (signal) => {
         await browserAuth.signOut(signal);
-        signal.throwIfAborted();
-        setState({ kind: 'locked' });
+        // Re-read the session so the page shows the signed-out state.
+        await settle(signal);
         return false;
       }),
   };

@@ -39,7 +39,9 @@ def _record_error(summary, stage, exc):
 class WorkersAura(TTSService):
     """Pipecat speech contexts with native Workers AI PCM streaming."""
 
-    def __init__(self, env, summary, control, started_at, *, voice="arcas", call_id=None):
+    def __init__(
+        self, env, summary, control, started_at, *, voice="arcas", call_id=None, gateway=None
+    ):
         super().__init__(
             name="WorkersAuraNative",
             text_aggregation_mode=TextAggregationMode.SENTENCE,
@@ -53,6 +55,7 @@ class WorkersAura(TTSService):
         )
         self._env = env
         self._voice = voice
+        self._options = {"gateway": gateway} if gateway else {}
         self._summary = summary
         self._control = control
         self._started_at = started_at
@@ -166,10 +169,11 @@ class WorkersAura(TTSService):
                     "container": "none",
                     "speaker": self._voice,
                 },
-                {"returnRawResponse": True},
+                self._options,
                 log=self.log.bind(generation=generation),
                 is_current=lambda: generation == self._control.generation,
                 timeout=timeout,
+                raw=True,
             )
             native = getattr(response, "js_response", response)
             record["http_status"] = int(native.status)

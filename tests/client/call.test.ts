@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, request } from '../../web/src/lib/api';
-import { defaultAgent } from '../../web/src/lib/contracts';
 import { VoiceCall } from '../../web/src/voice/call';
 
 const audio = vi.hoisted(() => ({
@@ -86,7 +85,7 @@ it('leaves connecting state when browser audio initialization fails', async () =
     throw new DOMException('Audio unavailable', 'NotSupportedError');
   });
   const call = new VoiceCall();
-  await call.start(defaultAgent);
+  await call.start({ utc_offset_minutes: 0 });
   expect(call.snapshot()).toMatchObject({
     phase: 'ended',
     microphoneActive: false,
@@ -104,7 +103,7 @@ describe('setup order', () => {
     const call = new VoiceCall();
     call.warm();
     const warmed = vi.mocked(request).mock.calls[0][0].replace('/warm', '');
-    await call.start(defaultAgent);
+    await call.start({ utc_offset_minutes: 0 });
     expect(steps).toEqual(['peer', 'offer', 'microphone']);
     const calls = vi.mocked(request).mock.calls.slice(1);
     expect(calls.map(([path]) => path)).toEqual(
@@ -165,7 +164,7 @@ describe('pending call recovery', () => {
       }),
     );
     const call = new VoiceCall();
-    const starting = call.start(defaultAgent);
+    const starting = call.start({ utc_offset_minutes: 0 });
     storage.set(pendingKey, 'a'.repeat(32));
     try {
       await call.recover();

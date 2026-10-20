@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent.config import AgentConfig
+from agent.config import CallSettings
 
 
 class RequestModel(BaseModel):
@@ -10,7 +10,7 @@ class RequestModel(BaseModel):
 
 
 class CreateCall(RequestModel):
-    agent: AgentConfig = Field(default_factory=AgentConfig)
+    settings: CallSettings = Field(default_factory=CallSettings)
 
 
 class Description(RequestModel):

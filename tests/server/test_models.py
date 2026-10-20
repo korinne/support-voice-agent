@@ -32,7 +32,7 @@ def test_incomplete_completion_cannot_execute_a_tool(finish_reason):
         tool_calls=[
             {
                 "id": "incomplete",
-                "function": {"name": "get_current_weather", "arguments": '{"location":'},
+                "function": {"name": "cancel_order", "arguments": '{"order_id":'},
             }
         ],
     )

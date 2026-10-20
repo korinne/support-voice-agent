@@ -1,28 +1,23 @@
 import { ArrowRight, LoaderCircle } from 'lucide-react';
-import { browserAuth } from '../auth';
 import type { SessionState } from '../lib/session';
 import { Button } from './Button';
 
-const { SignIn } = browserAuth;
-
-/** The start control: sign-in while locked, otherwise the call-to-action. */
+/** The start control. While signed out, the sign-in form on the stage takes its place. */
 export function StartCall({
   session,
   ended,
   disabled,
   onStart,
   onWarm,
-  onSignIn,
   onRetry,
 }: {
   session: SessionState;
   ended: boolean;
-  /** True when the call cannot start yet, for example without an assistant name. */
+  /** True when the call cannot start yet. */
   disabled: boolean;
   onStart: () => void;
   /** Called when the person points at or focuses Start, just before a likely click. */
   onWarm: () => void;
-  onSignIn: (credential: string) => void;
   onRetry: () => void;
 }) {
   switch (session.kind) {
@@ -30,9 +25,8 @@ export function StartCall({
       // The reason is in the status bar; only the recovery action lives here.
       return <Button onClick={onRetry}>Try again</Button>;
     case 'locked':
-      return <SignIn busy={false} error={session.error} onSubmit={onSignIn} />;
     case 'signing-in':
-      return <SignIn busy onSubmit={onSignIn} />;
+      return null;
     case 'loading':
     case 'checking':
       return <StartButton busy disabled ended={ended} onClick={onStart} />;

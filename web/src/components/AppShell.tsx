@@ -1,15 +1,19 @@
-import { AudioLines } from 'lucide-react';
+import { AudioLines, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 export function AppShell({
   children,
   label,
   actions,
+  icon: Icon = AudioLines,
+  skipLabel = 'Skip to voice call',
 }: {
   children: ReactNode;
-  /** Identifier shown after the brand, like the room ID in the video room example. */
+  /** Shown after the brand, such as the signed-in customer or "Staff desk". */
   label: string;
   actions?: ReactNode;
+  icon?: LucideIcon;
+  skipLabel?: string;
 }) {
   return (
     <>
@@ -17,7 +21,7 @@ export function AppShell({
         href="#main-content"
         className="fixed top-3 left-3 z-10 -translate-y-20 rounded-lg bg-stone-900 px-4 py-3 text-sm font-medium text-white focus-visible:translate-y-0"
       >
-        Skip to voice call
+        {skipLabel}
       </a>
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         <header className="flex items-center justify-between gap-4 rounded-t-xl border border-stone-200 bg-white p-4 sm:px-6">
@@ -26,13 +30,13 @@ export function AppShell({
               className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-700"
               aria-hidden="true"
             >
-              <AudioLines className="size-5" strokeWidth={1.75} />
+              <Icon className="size-5" strokeWidth={1.75} />
             </span>
-            <span className="text-sm font-semibold">Realtime</span>
-            <span className="text-stone-300" aria-hidden="true">
+            <span className="shrink-0 text-sm font-semibold whitespace-nowrap">Acme Corp</span>
+            <span className="shrink-0 text-stone-300" aria-hidden="true">
               /
             </span>
-            <span className="truncate font-mono text-xs text-stone-600">{label}</span>
+            <span className="truncate text-sm text-stone-600">{label}</span>
           </div>
           {actions}
         </header>

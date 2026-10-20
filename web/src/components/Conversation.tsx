@@ -1,16 +1,18 @@
 import clsx from 'clsx';
 import {
-  Activity,
   ArrowUpRight,
+  BadgeCheck,
+  BadgeX,
   BookOpen,
   Check,
-  Clock3,
-  CloudSun,
-  FileText,
-  Globe,
+  HandCoins,
   LoaderCircle,
   MessageSquare,
+  PackageX,
+  Route,
   SearchX,
+  Ticket,
+  UserRound,
   Wrench,
   X,
   type LucideIcon,
@@ -32,14 +34,21 @@ const assistantStatuses = {
 } satisfies Record<AssistantStatus, string>;
 
 const toolIcons = {
-  clock: Clock3,
-  weather: CloudSun,
-  docs: BookOpen,
-  page: FileText,
-  status: Activity,
-  web: Globe,
+  account: UserRound,
+  help: BookOpen,
+  cancel: PackageX,
+  ticket: Ticket,
+  credit: HandCoins,
   tool: Wrench,
 } satisfies Record<ToolDefinition['icon'], LucideIcon>;
+const noticeIcons = {
+  approved: { icon: BadgeCheck, className: 'text-emerald-700' },
+  declined: { icon: BadgeX, className: 'text-red-700' },
+  routed: { icon: Route, className: 'text-stone-500' },
+} satisfies Record<
+  Extract<ConversationEntry, { kind: 'notice' }>['icon'],
+  { icon: LucideIcon; className: string }
+>;
 const toolStatuses = {
   running: {
     label: 'Running',
@@ -83,21 +92,36 @@ function Entry({ item, name }: { item: ConversationEntry; name: string }) {
           {item.status === 'complete' && item.sources?.length ? (
             <ul className="space-y-1.5 pl-6" aria-label="Sources">
               {item.sources.map((source) => (
-                <li key={source.url}>
-                  <a
-                    href={source.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-start gap-1 text-xs leading-5 underline decoration-stone-300 underline-offset-2 hover:text-stone-900"
-                  >
+                <li key={source.url ?? source.title} className="text-xs leading-5">
+                  {source.url ? (
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-start gap-1 underline decoration-stone-300 underline-offset-2 hover:text-stone-900"
+                    >
+                      <span className="break-words">{source.title}</span>
+                      <ArrowUpRight className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                    </a>
+                  ) : (
                     <span className="break-words">{source.title}</span>
-                    <ArrowUpRight className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                  </a>
+                  )}
                 </li>
               ))}
             </ul>
+          ) : (item.status === 'complete' || item.status === 'empty') && item.summary ? (
+            <p className="pl-6 text-xs leading-5 break-words">{item.summary}</p>
           ) : null}
         </div>
+      );
+    }
+    case 'notice': {
+      const { icon: Icon, className } = noticeIcons[item.icon];
+      return (
+        <p className="flex items-start gap-2 rounded-lg bg-stone-50 px-3 py-2 text-sm leading-6 text-stone-700">
+          <Icon className={clsx('mt-1 size-4 shrink-0', className)} aria-hidden="true" />
+          <span className="min-w-0 break-words">{item.text}</span>
+        </p>
       );
     }
     case 'user':
